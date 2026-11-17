@@ -19,6 +19,8 @@
       MoveUser           SamAccountName, TargetOu
       RemoveUser         SamAccountName
       MoveFolder         Path, Destination
+      CreateHomeFolder   Path, Acl (entries with Identity, Sid, Rights)
+      RemoveFolder       Path (only when it is empty)
 #>
 
 function Get-ADFlowActionValue {
@@ -63,6 +65,8 @@ function Get-ADFlowActionText {
         'MoveUser' { return "Move to $($value.TargetOu)" }
         'RemoveUser' { return 'Delete account' }
         'MoveFolder' { return "Move folder to $($value.Destination)" }
+        'CreateHomeFolder' { return 'Create personal folder' }
+        'RemoveFolder' { return 'Delete empty folder' }
         default { return [string] $value.Action }
     }
 }
@@ -87,6 +91,8 @@ function Invoke-ADFlowAction {
         'MoveUser' { $Directory.MoveUser($sam, (Get-ADFlowActionValue $Action 'TargetOu')) }
         'RemoveUser' { $Directory.RemoveUser($sam) }
         'MoveFolder' { Move-ADFlowFolder -Path (Get-ADFlowActionValue $Action 'Path') -Destination (Get-ADFlowActionValue $Action 'Destination') }
+        'CreateHomeFolder' { New-ADFlowHomeFolder -Path (Get-ADFlowActionValue $Action 'Path') -Acl @(Get-ADFlowActionValue $Action 'Acl') -Confirm:$false }
+        'RemoveFolder' { Remove-ADFlowEmptyFolder -Path (Get-ADFlowActionValue $Action 'Path') -Confirm:$false }
         default { throw "Unknown action '$name'" }
     }
 }

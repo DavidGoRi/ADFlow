@@ -112,6 +112,8 @@ function Undo-ADFlowRun {
             failed        = @($results | Where-Object Status -eq 'Failed').Count
         }
         [IO.File]::WriteAllText($markerPath, (ConvertTo-Json -InputObject $marker), (New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false))
+        # The report of the original run now says that it was rolled back
+        [void] (Export-ADFlowRunReport -RunFolder $RunFolder)
     }
     [void] (Complete-ADFlowRun -Run $run -Results $results.ToArray())
     foreach ($item in $results) {

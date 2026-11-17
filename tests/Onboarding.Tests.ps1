@@ -6,6 +6,8 @@ param()
 BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestSetup.ps1')
     $config = Get-ADFlowConfig -Path $configPath
+    # Personal folders are tested in HomeFolder.Tests.ps1
+    $config.homeFolders.root = ''
 
     function Invoke-TestOnboarding {
         param([string] $CsvPath = $demoCsvPath, $Directory, [switch] $DryRun, [switch] $Preview)

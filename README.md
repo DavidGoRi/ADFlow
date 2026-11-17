@@ -11,15 +11,17 @@
 HR sends a CSV with the people who start next month. ADFlow turns each row into
 a ready-to-use account: a unique user name, the right OU for the department, the
 right groups for the job title and a temporary password that must be changed at
-the first logon. When people leave, another CSV closes their accounts: disabled,
+the first logon. It also creates their personal folder with the right NTFS
+permissions and drafts a welcome email for their manager. When people leave, another CSV closes their accounts: disabled,
 out of their groups, moved to the leavers OU and with their files archived.
 Every action is logged with the information needed to undo it, and a single
-command reverts a whole run.
+command reverts a whole run. Each run ends with an HTML report that can be
+attached to the ticket.
 
-> **Status: phase 2 of 5.** Onboarding, offboarding and rollback work end to end
-> against a simulated directory. Home folder creation, the welcome email, the
-> HTML report and the real Active Directory provider follow (see the
-> [roadmap](#roadmap)).
+> **Status: phase 3 of 5.** Onboarding (with personal folders and welcome
+> emails), offboarding, rollback and the HTML report work end to end against a
+> simulated directory. The real Active Directory provider and the lab guide
+> follow (see the [roadmap](#roadmap)).
 
 ## Why it is built this way
 
@@ -76,6 +78,17 @@ settings ► Get-ADFlowConfig                                     │   (Invoke-
   dates. One bad row does not stop the others.
 - **Idempotent**: a person whose `EmployeeId` is already in the directory is
   skipped, so the same file can be run twice safely.
+- **Personal folder with NTFS permissions**: `<root>\<user>` is created with
+  its permissions in one step (never open in between). Inheritance from the
+  share is cut and only these entries remain: SYSTEM, Administrators and the
+  admin groups with full control, and the user with *Modify* (they can work with
+  their files but not change the permissions). The folder and drive letter are
+  stored in the account. An existing folder is never touched, and an unreachable
+  share only produces a warning.
+- **Welcome email draft** for each new hire, built from an HTML template
+  ([`config/welcome.html`](config/welcome.html)) and saved as an unsent `.eml`:
+  Outlook opens it as a draft that IT can check and send. It goes to the
+  manager, with a copy to the helpdesk, and **never contains the password**.
 
 ### Offboarding
 
@@ -120,6 +133,11 @@ and reports what failed.
   standard `-WhatIf`, and live.
 - **Audit trail** per run in `output\runs\<RunId>\`: `audit.jsonl` (written as
   it happens), `audit.csv` and `summary.json`.
+- **HTML report** per run (`report.html`): one self-contained file with the
+  totals, every row with its status and every action with its details and
+  whether it can be undone. It follows the light or dark theme, prints well and
+  escapes everything HR typed. When a run is rolled back, its report says so.
+  `-Action Report -RunId …` writes it again.
 
 ## Quick start
 
@@ -130,9 +148,13 @@ is needed to try it: the demo uses the simulated directory.
 git clone https://github.com/DavidGoRi/ADFlow.git
 cd ADFlow
 
-# Onboarding: see what would happen, then do it in the simulated directory
-.\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -DryRun
-.\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -ResetMockDirectory
+# Onboarding: see what would happen, then do it in the simulated directory,
+# with the personal folders in a local folder instead of the sample share
+New-Item -ItemType Directory -Path .\output\home -Force
+.\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -HomeRoot .\output\home -DryRun
+.\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -HomeRoot .\output\home -ResetMockDirectory
+
+# Each run prints where its report.html and welcome drafts are
 
 # Offboarding, with a fictitious personal folder to archive
 New-Item -ItemType Directory -Path .\output\home\ana.garcial -Force
@@ -213,9 +235,9 @@ Run 20261117-175912-c371: 12 Reverted
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `-Action` | | `Onboard`, `Offboard` or `Undo` |
+| `-Action` | | `Onboard`, `Offboard`, `Undo` or `Report` |
 | `-CsvPath` | | HR file, for `Onboard` and `Offboard` |
-| `-RunId` | | Run to revert, for `Undo` |
+| `-RunId` | | Run to revert (`Undo`) or to report on again (`Report`) |
 | `-ConfigPath` | `config\adflow.json` | Domain, OUs, roles, groups and offboarding rules |
 | `-Provider` | `Mock` | Directory provider |
 | `-MockSeedPath` | `demo\directory.json` | Starting state of the simulated directory |
@@ -278,7 +300,19 @@ E0903;;2026-11-30;Resignation
   "roles": {
     "Helpdesk Technician": [ "GG-IT-Helpdesk", "GG-VPN-Users" ]
   },
-  "homeFolders": { "root": "\\\\fs01.corp.example.com\\home$" },
+  "homeFolders": {
+    "root": "\\\\fs01.corp.example.com\\home$",
+    "drive": "H:",
+    "adminGroups": [ "GG-IT-Admins" ]
+  },
+  "welcome": {
+    "template": "welcome.html",
+    "subject": "Welcome to {{CompanyName}}, {{GivenName}}",
+    "from": "it-helpdesk@corp.example.com",
+    "companyName": "Example Corp",
+    "helpdeskEmail": "it-helpdesk@corp.example.com",
+    "helpdeskPhone": "+34 900 000 000"
+  },
   "offboarding": {
     "ou": "OU=Leavers,DC=corp,DC=example,DC=com",
     "archiveRoot": "\\\\fs01.corp.example.com\\archive$\\home",
@@ -289,7 +323,13 @@ E0903;;2026-11-30;Resignation
 }
 ```
 
-The file is validated on load and every problem is reported at once.
+The file is validated on load and every problem is reported at once. Relative
+paths (the welcome template) are relative to the settings file. The template can
+use `{{GivenName}}`, `{{DisplayName}}`, `{{SamAccountName}}`,
+`{{UserPrincipalName}}`, `{{Mail}}`, `{{Department}}`, `{{Title}}`,
+`{{StartDate}}`, `{{ManagerName}}`, `{{HomeFolder}}`, `{{CompanyName}}`,
+`{{HelpdeskEmail}}` and `{{HelpdeskPhone}}`; an unknown placeholder is an error,
+so a typo never reaches a new hire.
 
 ## Audit trail
 
@@ -309,10 +349,14 @@ Statuses: `Succeeded`, `Failed`, `Planned` (dry run), `WhatIf`, `Skipped`,
 
 ## Tests
 
-191 Pester tests cover name generation, passwords, settings, both HR files, the
+241 Pester tests cover name generation, passwords, settings, both HR files, the
 simulated directory, the action catalogue, folder archiving, the audit trail,
 onboarding, offboarding (protections, partial failures, idempotency), rollback
-(exact restoration, order, double-undo guard, failures) and the entry script.
+(exact restoration, order, double-undo guard, failures), personal folders (the
+NTFS permissions are applied for real and read back), welcome drafts (headers,
+accents, no password), HTML reports (escaping, banners) and the entry script.
+The simulated directory gives every account and group a fictitious SID, so the
+folder permissions are real NTFS entries even without a domain.
 They also check that every script is UTF-8 with BOM (needed by Windows
 PowerShell 5.1 for accented text) and that the sample data only uses the
 reserved `example.com` domain.
@@ -334,9 +378,9 @@ GitHub Actions runs both on Windows PowerShell 5.1 for every push.
    audit trail, tests and CI.
 2. **Offboarding and rollback** ✅ — disable, record and remove groups, leavers
    OU, folder archive, protected accounts; `Undo-ADFlowRun`.
-3. **Home folders, welcome email and report** — personal folder with NTFS
-   permissions at onboarding, welcome message from a template (generated, not
-   sent) and an HTML report of each run.
+3. **Home folders, welcome email and report** ✅ — personal folder with NTFS
+   permissions at onboarding, welcome email draft from a template and an HTML
+   report of each run.
 4. **Active Directory provider and lab** — the same methods on top of RSAT, and
    a guide to build a test domain with Windows Server Evaluation in Hyper-V.
 5. **Polish** — screenshots, changelog and version 1.0.0.
@@ -346,6 +390,7 @@ GitHub Actions runs both on Windows PowerShell 5.1 for every push.
 ```
 ADFlow.ps1                 entry point
 config/adflow.json         sample settings (fictitious domain)
+config/welcome.html        welcome email template
 demo/new-hires.csv         sample HR file of new hires
 demo/leavers.csv           sample HR file of leavers
 demo/directory.json        starting state of the simulated directory
@@ -355,7 +400,9 @@ src/Config.ps1             settings, departments and roles
 src/HRFile.ps1             HR file reading and validation
 src/MockDirectory.ps1      simulated directory provider
 src/Actions.ps1            changes described as data, and how to run them
-src/HomeFolder.ps1         personal folder paths and archiving
+src/HomeFolder.ps1         personal folders: permissions, creation and archiving
+src/Welcome.ps1            welcome email drafts
+src/Report.ps1             HTML report (src/report-template.html)
 src/Audit.ps1              audit trail
 src/Onboarding.ps1         onboarding
 src/Offboarding.ps1        offboarding

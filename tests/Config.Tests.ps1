@@ -77,3 +77,15 @@ Describe 'Get-ADFlowGroupAssignment' {
         @((Get-ADFlowGroupAssignment -Config $local -Title 'Tech').Groups).Count | Should -Be 0
     }
 }
+
+Describe 'Settings for phase 3' {
+    It 'remembers the folder of the settings file for relative paths' {
+        $config.ConfigDirectory | Should -Be (Split-Path -Path $configPath -Parent)
+        Test-Path -Path (Join-Path $config.ConfigDirectory $config.welcome.template) | Should -BeTrue
+    }
+
+    It 'needs a template when there is a welcome section' {
+        $path = Write-TestConfig '{ "domain": { "upnSuffix": "corp.example.com" }, "departments": { "IT": { "ou": "OU=IT,DC=corp,DC=example,DC=com" } }, "welcome": { "subject": "Hi" } }'
+        { Get-ADFlowConfig -Path $path } | Should -Throw '*welcome.template*'
+    }
+}

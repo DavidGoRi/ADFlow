@@ -11,15 +11,18 @@
 RR. HH. envía un CSV con las personas que se incorporan el mes que viene. ADFlow
 convierte cada fila en una cuenta lista para usar: un nombre de usuario único, la
 OU de su departamento, los grupos de su puesto y una contraseña temporal que hay
-que cambiar en el primer inicio de sesión. Cuando alguien se va, otro CSV cierra
+que cambiar en el primer inicio de sesión. También crea su carpeta personal con
+los permisos NTFS adecuados y prepara un correo de bienvenida para su
+responsable. Cuando alguien se va, otro CSV cierra
 su cuenta: deshabilitada, fuera de sus grupos, en la OU de bajas y con sus
 archivos archivados. Cada acción queda registrada con lo necesario para
-deshacerla, y una sola orden revierte una ejecución entera.
+deshacerla, y una sola orden revierte una ejecución entera. Cada ejecución
+termina con un informe HTML que se puede adjuntar al ticket.
 
-> **Estado: fase 2 de 5.** Las altas, las bajas y la reversión funcionan de
-> principio a fin contra un directorio simulado. Después llegan la creación de
-> carpetas personales, el correo de bienvenida, el informe HTML y el proveedor
-> real de Active Directory (ver la [hoja de ruta](#hoja-de-ruta)).
+> **Estado: fase 3 de 5.** Las altas (con carpetas personales y correos de
+> bienvenida), las bajas, la reversión y el informe HTML funcionan de principio
+> a fin contra un directorio simulado. Después llegan el proveedor real de
+> Active Directory y la guía del laboratorio (ver la [hoja de ruta](#hoja-de-ruta)).
 
 ## Por qué está hecho así
 
@@ -77,6 +80,17 @@ configuración ► Get-ADFlowConfig                                     │   (I
   formados y fechas no válidas. Una fila errónea no detiene las demás.
 - **Idempotente**: si el `EmployeeId` ya está en el directorio, la persona se
   omite, así que el mismo archivo se puede ejecutar dos veces sin riesgo.
+- **Carpeta personal con permisos NTFS**: `<raíz>\<usuario>` se crea con sus
+  permisos en un solo paso (nunca queda abierta entre medias). Se corta la
+  herencia del recurso compartido y solo quedan SYSTEM, Administradores y los
+  grupos de administración con control total, y el usuario con *Modificar*
+  (trabaja con sus archivos, pero no puede cambiar los permisos). La carpeta y la
+  letra de unidad se guardan en la cuenta. Una carpeta que ya existe no se toca, y
+  si el recurso compartido no responde solo se genera un aviso.
+- **Borrador del correo de bienvenida** para cada alta, a partir de una plantilla
+  HTML ([`config/welcome.html`](config/welcome.html)), guardado como `.eml` sin
+  enviar: Outlook lo abre como borrador para que IT lo revise y lo envíe. Va al
+  responsable, con copia al servicio de soporte, y **nunca incluye la contraseña**.
 
 ### Bajas
 
@@ -120,6 +134,11 @@ reversión deshace todo lo que puede e informa de lo que ha fallado.
   el `-WhatIf` estándar y el modo real.
 - **Auditoría** de cada ejecución en `output\runs\<RunId>\`: `audit.jsonl` (se
   escribe sobre la marcha), `audit.csv` y `summary.json`.
+- **Informe HTML** de cada ejecución (`report.html`): un único archivo con los
+  totales, cada fila con su estado y cada acción con sus detalles y si se puede
+  deshacer. Sigue el tema claro u oscuro, se imprime bien y escapa todo lo que ha
+  escrito RR. HH. Cuando una ejecución se revierte, su informe lo indica.
+  `-Action Report -RunId …` lo vuelve a generar.
 
 ## Inicio rápido
 
@@ -130,9 +149,13 @@ más para probarlo: la demo usa el directorio simulado.
 git clone https://github.com/DavidGoRi/ADFlow.git
 cd ADFlow
 
-# Altas: ver qué pasaría y hacerlas en el directorio simulado
-.\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -DryRun
-.\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -ResetMockDirectory
+# Altas: ver qué pasaría y hacerlas en el directorio simulado,
+# con las carpetas personales en una carpeta local en vez del recurso de ejemplo
+New-Item -ItemType Directory -Path .\output\home -Force
+.\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -HomeRoot .\output\home -DryRun
+.\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -HomeRoot .\output\home -ResetMockDirectory
+
+# Cada ejecución indica dónde están su report.html y los borradores de bienvenida
 
 # Bajas, con una carpeta personal ficticia para archivar
 New-Item -ItemType Directory -Path .\output\home\ana.garcial -Force
@@ -215,9 +238,9 @@ Los mensajes del programa están en inglés, como el código.
 
 | Parámetro | Por defecto | Descripción |
 | --- | --- | --- |
-| `-Action` | | `Onboard` (altas), `Offboard` (bajas) o `Undo` (revertir) |
+| `-Action` | | `Onboard` (altas), `Offboard` (bajas), `Undo` (revertir) o `Report` (informe) |
 | `-CsvPath` | | CSV de RR. HH., para `Onboard` y `Offboard` |
-| `-RunId` | | Ejecución que se revierte, para `Undo` |
+| `-RunId` | | Ejecución que se revierte (`Undo`) o cuyo informe se regenera (`Report`) |
 | `-ConfigPath` | `config\adflow.json` | Dominio, OU, puestos, grupos y reglas de bajas |
 | `-Provider` | `Mock` | Proveedor de directorio |
 | `-MockSeedPath` | `demo\directory.json` | Estado inicial del directorio simulado |
@@ -280,7 +303,19 @@ E0903;;2026-11-30;Resignation
   "roles": {
     "Helpdesk Technician": [ "GG-IT-Helpdesk", "GG-VPN-Users" ]
   },
-  "homeFolders": { "root": "\\\\fs01.corp.example.com\\home$" },
+  "homeFolders": {
+    "root": "\\\\fs01.corp.example.com\\home$",
+    "drive": "H:",
+    "adminGroups": [ "GG-IT-Admins" ]
+  },
+  "welcome": {
+    "template": "welcome.html",
+    "subject": "Welcome to {{CompanyName}}, {{GivenName}}",
+    "from": "it-helpdesk@corp.example.com",
+    "companyName": "Example Corp",
+    "helpdeskEmail": "it-helpdesk@corp.example.com",
+    "helpdeskPhone": "+34 900 000 000"
+  },
   "offboarding": {
     "ou": "OU=Leavers,DC=corp,DC=example,DC=com",
     "archiveRoot": "\\\\fs01.corp.example.com\\archive$\\home",
@@ -292,6 +327,12 @@ E0903;;2026-11-30;Resignation
 ```
 
 El archivo se valida al cargarlo y se informa de todos los problemas a la vez.
+Las rutas relativas (la plantilla de bienvenida) son relativas al archivo de
+configuración. La plantilla puede usar `{{GivenName}}`, `{{DisplayName}}`,
+`{{SamAccountName}}`, `{{UserPrincipalName}}`, `{{Mail}}`, `{{Department}}`,
+`{{Title}}`, `{{StartDate}}`, `{{ManagerName}}`, `{{HomeFolder}}`,
+`{{CompanyName}}`, `{{HelpdeskEmail}}` y `{{HelpdeskPhone}}`; un marcador
+desconocido es un error, para que una errata nunca llegue a una persona nueva.
 
 ## Auditoría
 
@@ -312,11 +353,16 @@ personales.
 
 ## Tests
 
-191 tests de Pester cubren la generación de nombres, las contraseñas, la
+241 tests de Pester cubren la generación de nombres, las contraseñas, la
 configuración, los dos CSV, el directorio simulado, el catálogo de acciones, el
 archivado de carpetas, la auditoría, las altas, las bajas (protecciones, fallos a
 medias e idempotencia), la reversión (restauración exacta, orden, protección
-contra deshacer dos veces y fallos) y el script de entrada. También comprueban
+contra deshacer dos veces y fallos), las carpetas personales (los permisos NTFS
+se aplican de verdad y se vuelven a leer), los borradores de bienvenida
+(cabeceras, tildes y ausencia de contraseña), los informes HTML (escapado y
+avisos) y el script de entrada. El directorio simulado da a cada cuenta y grupo
+un SID ficticio, así que los permisos de las carpetas son entradas NTFS reales
+aunque no haya dominio. También comprueban
 que todos los scripts están en UTF-8 con BOM (Windows PowerShell 5.1 lo necesita
 para leer bien las tildes) y que los datos de ejemplo solo usan el dominio
 reservado `example.com`.
@@ -338,9 +384,9 @@ GitHub Actions ejecuta ambos en Windows PowerShell 5.1 con cada *push*.
    auditoría, tests y CI.
 2. **Bajas y reversión** ✅: deshabilitar, guardar y quitar los grupos, OU de
    bajas, archivado de la carpeta, cuentas protegidas; `Undo-ADFlowRun`.
-3. **Carpetas personales, correo de bienvenida e informe**: carpeta personal con
-   permisos NTFS al dar de alta, mensaje de bienvenida desde una plantilla (se
-   genera, no se envía) e informe HTML de cada ejecución.
+3. **Carpetas personales, correo de bienvenida e informe** ✅: carpeta personal
+   con permisos NTFS al dar de alta, borrador del correo de bienvenida desde una
+   plantilla e informe HTML de cada ejecución.
 4. **Proveedor de Active Directory y laboratorio**: los mismos métodos sobre
    RSAT y una guía para montar un dominio de pruebas con Windows Server
    Evaluation en Hyper-V.
@@ -351,6 +397,7 @@ GitHub Actions ejecuta ambos en Windows PowerShell 5.1 con cada *push*.
 ```
 ADFlow.ps1                 punto de entrada
 config/adflow.json         configuración de ejemplo (dominio ficticio)
+config/welcome.html        plantilla del correo de bienvenida
 demo/new-hires.csv         CSV de altas de ejemplo
 demo/leavers.csv           CSV de bajas de ejemplo
 demo/directory.json        estado inicial del directorio simulado
@@ -360,7 +407,9 @@ src/Config.ps1             configuración, departamentos y puestos
 src/HRFile.ps1             lectura y validación de los CSV de RR. HH.
 src/MockDirectory.ps1      proveedor de directorio simulado
 src/Actions.ps1            cambios descritos como datos y cómo aplicarlos
-src/HomeFolder.ps1         rutas y archivado de las carpetas personales
+src/HomeFolder.ps1         carpetas personales: permisos, creación y archivado
+src/Welcome.ps1            borradores del correo de bienvenida
+src/Report.ps1             informe HTML (src/report-template.html)
 src/Audit.ps1              auditoría
 src/Onboarding.ps1         altas
 src/Offboarding.ps1        bajas

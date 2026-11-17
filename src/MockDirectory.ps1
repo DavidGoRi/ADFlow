@@ -21,6 +21,8 @@
       SetDescription(sam, text)         replaces the description
       MoveUser(sam, dn)                 moves the account to another OU
       RemoveUser(sam)                   deletes the account (rollback of an onboarding)
+      GetUserSid(sam) / GetGroupSid(n)  the SID, for NTFS permissions
+      HomeFolderAdmins                  extra SIDs with full control of personal folders
       Save()                            keeps the changes (no-op in AD)
 
     A user object has at least samAccountName, employeeId, ou, enabled and
@@ -62,23 +64,64 @@ function Open-ADFlowMockDirectory {
     $ous = New-Object -TypeName 'System.Collections.Generic.HashSet[string]' -ArgumentList $ignoreCase
     foreach ($ou in @($data.ous)) { if ($ou) { [void] $ous.Add($ou) } }
 
+    # Fictitious domain SID. Users and groups get SIDs under it, so personal
+    # folders can carry real NTFS permissions for them (Windows accepts ACEs
+    # for SIDs it cannot resolve; they show as unknown accounts).
+    $domainSid = 'S-1-5-21-1000-2000-3000'
+    $sids = New-Object -TypeName 'System.Collections.Generic.List[string]'
+    foreach ($item in @($data.groups) + @($data.users)) { if ($item -and $item.sid) { $sids.Add([string] $item.sid) } }
+    $nextRid = 1101
+    foreach ($sid in $sids) {
+        $rid = [int] ($sid -split '-')[-1]
+        if ($rid -ge $nextRid) { $nextRid = $rid + 1 }
+    }
+
     $groups = New-Object -TypeName 'System.Collections.Generic.Dictionary[string,System.Collections.Generic.List[string]]' -ArgumentList $ignoreCase
+    $groupSids = New-Object -TypeName 'System.Collections.Generic.Dictionary[string,string]' -ArgumentList $ignoreCase
     foreach ($group in @($data.groups)) {
         if (-not $group) { continue }
         $members = New-Object -TypeName 'System.Collections.Generic.List[string]'
         foreach ($member in @($group.members)) { if ($member) { $members.Add($member) } }
         $groups[$group.name] = $members
+        if ($group.sid) { $groupSids[$group.name] = [string] $group.sid }
+        else { $groupSids[$group.name] = '{0}-{1}' -f $domainSid, $nextRid; $nextRid++ }
     }
 
     $users = New-Object -TypeName 'System.Collections.Generic.Dictionary[string,object]' -ArgumentList $ignoreCase
-    foreach ($user in @($data.users)) { if ($user) { $users[$user.samAccountName] = $user } }
+    foreach ($user in @($data.users)) {
+        if (-not $user) { continue }
+        if (-not $user.sid) {
+            $user | Add-Member -NotePropertyName sid -NotePropertyValue ('{0}-{1}' -f $domainSid, $nextRid) -Force
+            $nextRid++
+        }
+        $users[$user.samAccountName] = $user
+    }
 
     $directory = [pscustomobject]@{
-        Name      = 'Mock'
-        StatePath = $StatePath
-        Ous       = $ous
-        Groups    = $groups
-        Users     = $users
+        Name             = 'Mock'
+        StatePath        = $StatePath
+        Ous              = $ous
+        Groups           = $groups
+        GroupSids        = $groupSids
+        Users            = $users
+        DomainSid        = $domainSid
+        NextRid          = $nextRid
+        # The simulated groups do not exist in Windows, so nobody could manage
+        # the folders ADFlow creates. The account running ADFlow stands in for
+        # the administrators; the Active Directory provider leaves this empty.
+        HomeFolderAdmins = @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
+    }
+
+    $directory | Add-Member -MemberType ScriptMethod -Name GetUserSid -Value {
+        param([string] $SamAccountName)
+        if (-not $this.Users.ContainsKey($SamAccountName)) { throw "The user $SamAccountName does not exist" }
+        return [string] $this.Users[$SamAccountName].sid
+    }
+
+    $directory | Add-Member -MemberType ScriptMethod -Name GetGroupSid -Value {
+        param([string] $Name)
+        if (-not $this.GroupSids.ContainsKey($Name)) { throw "The group $Name does not exist" }
+        return $this.GroupSids[$Name]
     }
 
     $directory | Add-Member -MemberType ScriptMethod -Name FindUser -Value {
@@ -131,11 +174,15 @@ function Open-ADFlowMockDirectory {
             mail                  = $Spec.Mail
             ou                    = $Spec.Ou
             description           = [string] $Spec.Description
+            homeDirectory         = $Spec.HomeDirectory
+            homeDrive             = $Spec.HomeDrive
             enabled               = [bool] $Spec.Enabled
             passwordSet           = $true
             changePasswordAtLogon = [bool] $Spec.ChangePasswordAtLogon
             created               = (Get-Date).ToString('s')
+            sid                   = '{0}-{1}' -f $this.DomainSid, $this.NextRid
         }
+        $this.NextRid++
         $this.Users[$user.samAccountName] = $user
         return $user
     }
@@ -205,7 +252,7 @@ function Open-ADFlowMockDirectory {
         $state = [ordered]@{
             ous    = @($this.Ous | Sort-Object)
             groups = @($this.Groups.Keys | Sort-Object | ForEach-Object {
-                    [ordered]@{ name = $_; members = @($this.Groups[$_] | Sort-Object) }
+                    [ordered]@{ name = $_; sid = $this.GroupSids[$_]; members = @($this.Groups[$_] | Sort-Object) }
                 })
             users  = @($this.Users.Values | Sort-Object -Property samAccountName)
         }

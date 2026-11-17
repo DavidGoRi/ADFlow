@@ -29,7 +29,17 @@
     "Marketing Specialist": [ "GG-Marketing-Users" ]
   },
   "homeFolders": {
-    "root": "\\\\fs01.corp.example.com\\home$"
+    "root": "\\\\fs01.corp.example.com\\home$",
+    "drive": "H:",
+    "adminGroups": [ "GG-IT-Admins" ]
+  },
+  "welcome": {
+    "template": "welcome.html",
+    "subject": "Welcome to {{CompanyName}}, {{GivenName}}",
+    "from": "it-helpdesk@corp.example.com",
+    "companyName": "Example Corp",
+    "helpdeskEmail": "it-helpdesk@corp.example.com",
+    "helpdeskPhone": "+34 900 000 000"
   },
   "offboarding": {
     "ou": "OU=Leavers,DC=corp,DC=example,DC=com",

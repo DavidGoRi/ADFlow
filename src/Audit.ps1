@@ -10,6 +10,7 @@
                      run that stops halfway still leaves its trail
       audit.csv      the same actions as a table, for Excel
       summary.json   run details and one line per HR row with its result
+      report.html    the same, readable (Export-ADFlowRunReport)
 
     Every change carries an "undo" object with the reverse action (for example
     RemoveGroupMember for AddGroupMember). The rollback command of phase 2
@@ -142,5 +143,6 @@ function Complete-ADFlowRun {
     }
     $json = ConvertTo-Json -InputObject $summary -Depth 6
     [IO.File]::WriteAllText((Join-Path -Path $Run.Folder -ChildPath 'summary.json'), $json, $script:ADFlowUtf8)
+    $summary | Add-Member -NotePropertyName report -NotePropertyValue (Export-ADFlowRunReport -RunFolder $Run.Folder)
     return $summary
 }

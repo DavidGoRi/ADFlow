@@ -3,7 +3,7 @@
 
 $script:repoRoot = Split-Path -Path $PSScriptRoot -Parent
 foreach ($file in 'Naming', 'Password', 'Config', 'HRFile', 'MockDirectory', 'Audit', 'Actions', 'HomeFolder',
-    'Onboarding', 'Offboarding', 'Rollback') {
+    'Welcome', 'Report', 'Onboarding', 'Offboarding', 'Rollback') {
     . (Join-Path -Path $script:repoRoot -ChildPath "src\$file.ps1")
 }
 $script:configPath = Join-Path -Path $script:repoRoot -ChildPath 'config\adflow.json'

@@ -47,7 +47,7 @@ Describe 'ADFlow.ps1' {
         $state = Join-Path -Path $TestDrive -ChildPath 'mock.json'
         $logs = Join-Path -Path $TestDrive -ChildPath 'runs'
         $results = & (Join-Path $repoRoot 'ADFlow.ps1') -Action Onboard -CsvPath $demoCsvPath -DryRun -PassThru `
-            -MockStatePath $state -LogPath $logs 6> $null
+            -MockStatePath $state -LogPath $logs -HomeRoot (Join-Path $TestDrive 'no-share') 6> $null
         @($results | Where-Object Status -eq 'Planned').Count | Should -Be 8
         Test-Path -Path $state | Should -BeFalse
         @(Get-ChildItem -Path $logs -Directory).Count | Should -Be 1
@@ -57,11 +57,11 @@ Describe 'ADFlow.ps1' {
         $state = Join-Path -Path $TestDrive -ChildPath 'mock-live.json'
         $logs = Join-Path -Path $TestDrive -ChildPath 'runs-live'
         $script = Join-Path $repoRoot 'ADFlow.ps1'
-        $first = & $script -Action Onboard -CsvPath $demoCsvPath -PassThru -MockStatePath $state -LogPath $logs 6> $null
+        $first = & $script -Action Onboard -CsvPath $demoCsvPath -PassThru -MockStatePath $state -LogPath $logs -HomeRoot (Join-Path $TestDrive 'no-share') 6> $null
         @($first | Where-Object Status -eq 'Created').Count | Should -Be 8
-        $second = & $script -Action Onboard -CsvPath $demoCsvPath -PassThru -MockStatePath $state -LogPath $logs 6> $null
+        $second = & $script -Action Onboard -CsvPath $demoCsvPath -PassThru -MockStatePath $state -LogPath $logs -HomeRoot (Join-Path $TestDrive 'no-share') 6> $null
         @($second | Where-Object Status -eq 'Created').Count | Should -Be 0
-        $third = & $script -Action Onboard -CsvPath $demoCsvPath -PassThru -MockStatePath $state -LogPath $logs -ResetMockDirectory 6> $null
+        $third = & $script -Action Onboard -CsvPath $demoCsvPath -PassThru -MockStatePath $state -LogPath $logs -HomeRoot (Join-Path $TestDrive 'no-share') -ResetMockDirectory 6> $null
         @($third | Where-Object Status -eq 'Created').Count | Should -Be 8
     }
 
@@ -81,6 +81,16 @@ Describe 'ADFlow.ps1' {
         @($undo | Where-Object Status -ne 'Reverted').Count | Should -Be 0
         $state = [IO.File]::ReadAllText($common.MockStatePath) | ConvertFrom-Json
         @($state.users | Where-Object { $_.samAccountName -eq 'carlos.ruiz' })[0].enabled | Should -BeTrue
+    }
+
+    It 'writes the report of a run again' {
+        $logs = Join-Path -Path $TestDrive -ChildPath 'runs-report'
+        $script = Join-Path $repoRoot 'ADFlow.ps1'
+        $run = & $script -Action Onboard -CsvPath $demoCsvPath -DryRun -PassThru -LogPath $logs -HomeRoot (Join-Path $TestDrive 'no-share') 6> $null
+        $report = Join-Path $run[0].RunFolder 'report.html'
+        Remove-Item -Path $report
+        & $script -Action Report -RunId $run[0].RunId -LogPath $logs -PassThru 6> $null | Should -Be $report
+        Test-Path -Path $report | Should -BeTrue
     }
 
     It 'asks for the parameters each action needs' {

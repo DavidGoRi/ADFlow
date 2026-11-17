@@ -51,11 +51,28 @@ function Invoke-ADFlowOnboarding {
     $reserved = New-Object -TypeName 'System.Collections.Generic.HashSet[string]' -ArgumentList ([StringComparer]::OrdinalIgnoreCase)
     $results = New-Object -TypeName 'System.Collections.Generic.List[object]'
     $changed = $false
+    $folderAdmins = @(Get-ADFlowHomeFolderAdmin -Config $Config -Directory $Directory)
+    # Checked once: an unreachable share can take seconds to answer
+    $homeRoot = if ($Config.homeFolders) { [string] $Config.homeFolders.root } else { '' }
+    $homeRootIssue = $null
+    if ($homeRoot -and -not (Test-ADFlowFolder -Path $homeRoot)) {
+        $homeRootIssue = "Home folder root $homeRoot is not reachable: no personal folder was created"
+    }
 
     foreach ($record in $records) {
         $result = Invoke-ADFlowHireRecord -Record $record -Config $Config -Directory $Directory -Run $run `
-            -Reserved $reserved -Mode $mode
+            -Reserved $reserved -Mode $mode -FolderAdmins $folderAdmins -HomeRoot $homeRoot -HomeRootIssue $homeRootIssue
         if ($result.Status -eq 'Created') { $changed = $true }
+        if ($Config.welcome -and $result.Status -in 'Created', 'Planned') {
+            try {
+                $welcome = Export-ADFlowWelcomeMessage -Result $result -Record $record -Config $Config -Directory $Directory `
+                    -Folder (Join-Path -Path $run.Folder -ChildPath 'welcome')
+                $result.WelcomeMessage = $welcome
+            }
+            catch {
+                $result.Warnings = @($result.Warnings) + "Welcome message not written: $(Get-ADFlowErrorMessage $_)"
+            }
+        }
         $results.Add($result)
     }
 
@@ -71,7 +88,8 @@ function Invoke-ADFlowOnboarding {
 function Invoke-ADFlowHireRecord {
     # One HR row. -WhatIf reaches it through the caller's $WhatIfPreference.
     [CmdletBinding(SupportsShouldProcess)]
-    param($Record, $Config, $Directory, $Run, $Reserved, [string] $Mode)
+    param($Record, $Config, $Directory, $Run, $Reserved, [string] $Mode, [object[]] $FolderAdmins = @(),
+        [string] $HomeRoot, [string] $HomeRootIssue)
 
     $warnings = New-Object -TypeName 'System.Collections.Generic.List[string]'
     foreach ($warning in $Record.Warnings) { $warnings.Add($warning) }
@@ -83,6 +101,9 @@ function Invoke-ADFlowHireRecord {
         UserPrincipalName = $null
         Ou                = $null
         Groups            = @()
+        Mail              = $null
+        HomeFolder        = $null
+        WelcomeMessage    = $null
         Status            = $null
         Message           = ''
         Warnings          = $warnings
@@ -146,6 +167,21 @@ function Invoke-ADFlowHireRecord {
     $result.SamAccountName = $sam
     $result.UserPrincipalName = '{0}@{1}' -f $sam, $Config.domain.upnSuffix
     $mailDomain = if ($Config.domain.mailDomain) { $Config.domain.mailDomain } else { $Config.domain.upnSuffix }
+    $result.Mail = '{0}@{1}' -f $sam, $mailDomain
+
+    # Personal folder: only when the root is reachable and the folder is new
+    $homePath = $null
+    if ($HomeRoot) {
+        $candidatePath = Get-ADFlowHomeFolderPath -Root $HomeRoot -SamAccountName $sam
+        if ($HomeRootIssue) {
+            $warnings.Add($HomeRootIssue)
+        }
+        elseif (Test-Path -LiteralPath $candidatePath) {
+            $warnings.Add("Personal folder $candidatePath already exists and was left as it is")
+        }
+        else { $homePath = $candidatePath }
+    }
+    $homeDrive = if ($Config.homeFolders -and $Config.homeFolders.drive) { [string] $Config.homeFolders.drive } else { $null }
 
     $spec = @{
         SamAccountName        = $sam
@@ -157,14 +193,16 @@ function Invoke-ADFlowHireRecord {
         Department            = $Record.Department
         Title                 = $Record.Title
         Manager               = $manager
-        Mail                  = '{0}@{1}' -f $sam, $mailDomain
+        Mail                  = $result.Mail
         Ou                    = $ou
+        HomeDirectory         = $homePath
+        HomeDrive             = $(if ($homePath) { $homeDrive } else { $null })
         Enabled               = $true
         ChangePasswordAtLogon = $true
     }
     $details = [ordered]@{}
     foreach ($key in 'SamAccountName', 'UserPrincipalName', 'DisplayName', 'GivenName', 'Surname', 'EmployeeId',
-        'Department', 'Title', 'Manager', 'Mail', 'Ou', 'Enabled', 'ChangePasswordAtLogon') {
+        'Department', 'Title', 'Manager', 'Mail', 'Ou', 'HomeDirectory', 'HomeDrive', 'Enabled', 'ChangePasswordAtLogon') {
         $details[$key] = $spec[$key]
     }
     if ($Record.StartDate) { $details.StartDate = $Record.StartDate.ToString('yyyy-MM-dd') }
@@ -179,6 +217,12 @@ function Invoke-ADFlowHireRecord {
         Write-ADFlowAuditEntry @audit -Action CreateUser -Target $sam -Status $plannedStatus -Details $details
         foreach ($group in $groups) {
             Write-ADFlowAuditEntry @audit -Action AddGroupMember -Target $sam -Status $plannedStatus -Details @{ Group = $group }
+        }
+        if ($homePath) {
+            # The account does not exist yet, so the user entry has no SID
+            $acl = Get-ADFlowHomeFolderAcl -User ([ordered]@{ Name = $sam; Sid = $null }) -Admins $FolderAdmins
+            Write-ADFlowAuditEntry @audit -Action CreateHomeFolder -Target $sam -Status $plannedStatus -Details ([ordered]@{ Path = $homePath; Acl = $acl })
+            $result.HomeFolder = $homePath
         }
         return Complete-ADFlowResult $result
     }
@@ -217,6 +261,23 @@ function Invoke-ADFlowHireRecord {
         }
     }
     $result.Groups = $added.ToArray()
+
+    # 8. Personal folder with its permissions: a failure is a warning too
+    if ($homePath -and $PSCmdlet.ShouldProcess($homePath, 'Create personal folder')) {
+        $acl = $null
+        try {
+            $acl = Get-ADFlowHomeFolderAcl -User ([ordered]@{ Name = $sam; Sid = $Directory.GetUserSid($sam) }) -Admins $FolderAdmins
+            Invoke-ADFlowAction -Directory $Directory -Action ([ordered]@{ Action = 'CreateHomeFolder'; Path = $homePath; Acl = $acl })
+            $result.HomeFolder = $homePath
+            Write-ADFlowAuditEntry @audit -Action CreateHomeFolder -Target $sam -Status Succeeded -Details ([ordered]@{ Path = $homePath; Acl = $acl }) `
+                -Undo ([ordered]@{ Action = 'RemoveFolder'; Path = $homePath })
+        }
+        catch {
+            $reason = Get-ADFlowErrorMessage $_
+            $warnings.Add("Could not create the personal folder $($homePath): $reason")
+            Write-ADFlowAuditEntry @audit -Action CreateHomeFolder -Target $sam -Status Failed -Details ([ordered]@{ Path = $homePath; Acl = $acl }) -Message $reason
+        }
+    }
     return Complete-ADFlowResult $result
 }
 

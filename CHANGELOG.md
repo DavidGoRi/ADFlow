@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Phase 3: personal folder at onboarding, created with protected NTFS
+  permissions (SYSTEM, Administrators and admin groups full control, the user
+  Modify) and removed on rollback only when empty.
+- Fictitious SIDs in the simulated directory, so folder permissions are real.
+- Welcome email drafts (.eml, X-Unsent) from an HTML template, to the manager
+  with a copy to the helpdesk, never with the password.
+- HTML report of every run, refreshed when the run is rolled back, and
+  `-Action Report`.
 - Phase 2: offboarding from an HR file of leavers (by `EmployeeId` or
   `SamAccountName`): records the groups, disables the account, writes the
   leave reason, removes the groups except `keepGroups`, moves it to the leavers

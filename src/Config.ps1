@@ -48,7 +48,10 @@ function Get-ADFlowConfig {
     if ($config.password -and $config.password.length -and [int] $config.password.length -lt 12) {
         $problems.Add('password.length must be 12 or more')
     }
+    if ($config.welcome -and -not $config.welcome.template) { $problems.Add('welcome.template is required when there is a welcome section') }
     if ($problems.Count) { throw "Invalid settings in ${Path}: $($problems -join '; ')" }
+    # Relative paths in the settings (the welcome template) are relative to the file
+    $config | Add-Member -NotePropertyName ConfigDirectory -NotePropertyValue (Split-Path -Path $fullPath -Parent) -Force
     return $config
 }
 

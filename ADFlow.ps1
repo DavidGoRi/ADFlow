@@ -11,6 +11,10 @@
              removes their groups, moves them to the leavers OU and archives
              their personal folders.
     Undo     reverts a previous Onboard or Offboard run from its audit trail.
+    Report   writes the HTML report of a run again.
+
+    Onboarding also creates each personal folder with its NTFS permissions
+    and writes a welcome email draft (.eml) for each new hire.
 
     Every action goes to an audit trail under output\runs\<RunId>\.
 
@@ -32,10 +36,10 @@
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Onboard', 'Offboard', 'Undo')] [string] $Action,
+    [Parameter(Mandatory)] [ValidateSet('Onboard', 'Offboard', 'Undo', 'Report')] [string] $Action,
     # HR file, for Onboard and Offboard
     [string] $CsvPath,
-    # Run to revert, for Undo (a folder name under -LogPath)
+    # Run to revert (Undo) or to report on again (Report): a folder name under -LogPath
     [string] $RunId,
     [string] $ConfigPath = (Join-Path -Path $PSScriptRoot -ChildPath 'config\adflow.json'),
     [ValidateSet('Mock')] [string] $Provider = 'Mock',
@@ -56,12 +60,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 foreach ($file in 'Naming', 'Password', 'Config', 'HRFile', 'MockDirectory', 'Audit', 'Actions', 'HomeFolder',
-    'Onboarding', 'Offboarding', 'Rollback') {
+    'Welcome', 'Report', 'Onboarding', 'Offboarding', 'Rollback') {
     . (Join-Path -Path $PSScriptRoot -ChildPath "src\$file.ps1")
 }
 
 if ($Action -in 'Onboard', 'Offboard' -and -not $CsvPath) { throw "-Action $Action needs -CsvPath" }
-if ($Action -eq 'Undo' -and -not $RunId) { throw '-Action Undo needs -RunId (a folder name in the runs folder)' }
+if ($Action -in 'Undo', 'Report' -and -not $RunId) { throw "-Action $Action needs -RunId (a folder name in the runs folder)" }
+if ($Action -eq 'Report') {
+    $report = Export-ADFlowRunReport -RunFolder (Join-Path -Path $LogPath -ChildPath $RunId)
+    Write-Host "Report: $report"
+    if ($PassThru) { $report }
+    return
+}
 
 $config = Get-ADFlowConfig -Path $ConfigPath
 # Absolute paths, so the audit trail can be undone from any folder
@@ -112,6 +122,9 @@ if ($results.Count) {
     Write-Host ''
     Write-Host "Run $($results[0].RunId): $counts"
     Write-Host "Audit trail: $($results[0].RunFolder)"
+    Write-Host "Report:      $(Join-Path -Path $results[0].RunFolder -ChildPath 'report.html')"
+    $welcomeCount = @($results | Where-Object { $_.PSObject.Properties['WelcomeMessage'] -and $_.WelcomeMessage }).Count
+    if ($welcomeCount) { Write-Host "Welcome messages (unsent drafts): $welcomeCount in $(Join-Path -Path $results[0].RunFolder -ChildPath 'welcome')" }
 }
 elseif ($Action -eq 'Undo') {
     Write-Host "Run $RunId has no changes to undo."

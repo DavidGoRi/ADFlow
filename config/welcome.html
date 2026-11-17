@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Welcome to {{CompanyName}}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 0;">
+<tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;">
+  <tr><td style="background:#1e3a5f;color:#ffffff;padding:24px 32px;font-size:22px;font-weight:600;">
+    Welcome to {{CompanyName}}, {{GivenName}}
+  </td></tr>
+  <tr><td style="padding:24px 32px;font-size:15px;line-height:1.6;">
+    <p>Hello {{ManagerName}},</p>
+    <p>The IT accounts for <strong>{{DisplayName}}</strong>, who joins
+       <strong>{{Department}}</strong> as <strong>{{Title}}</strong> on
+       <strong>{{StartDate}}</strong>, are ready. Please share these details
+       with them on their first day.</p>
+    <table role="presentation" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:14px;">
+      <tr><td style="color:#6b7280;width:40%;">User name</td><td><strong>{{SamAccountName}}</strong></td></tr>
+      <tr><td style="color:#6b7280;">Sign-in name</td><td>{{UserPrincipalName}}</td></tr>
+      <tr><td style="color:#6b7280;">Email address</td><td>{{Mail}}</td></tr>
+      <tr><td style="color:#6b7280;">Personal folder</td><td>{{HomeFolder}}</td></tr>
+    </table>
+    <p><strong>Password.</strong> For security, the temporary password is not
+       in this message. The IT helpdesk will give it to {{GivenName}} in person
+       or by phone. Windows will ask for a new password at the first sign-in.</p>
+    <p>Questions? Contact the IT helpdesk at
+       <a href="mailto:{{HelpdeskEmail}}">{{HelpdeskEmail}}</a> or {{HelpdeskPhone}}.</p>
+    <p>Kind regards,<br>IT Helpdesk &middot; {{CompanyName}}</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

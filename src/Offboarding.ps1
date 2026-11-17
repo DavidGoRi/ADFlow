@@ -79,9 +79,16 @@ function Get-ADFlowOffboardingSetting {
     $section = $Config.offboarding
     if (-not $section -or -not $section.ou) { throw 'The settings need offboarding.ou (the leavers OU) for offboarding' }
     $homeRoot = if ($Config.homeFolders) { [string] $Config.homeFolders.root } else { '' }
+    # Checked once: an unreachable share can take seconds to answer
+    $homeRootIssue = $null
+    if ($homeRoot -and -not (Test-ADFlowFolder -Path $homeRoot)) {
+        $homeRootIssue = "Home folder root $homeRoot is not reachable: the personal folder was not archived"
+        $homeRoot = ''
+    }
     return [pscustomobject]@{
         Ou                = [string] $section.ou
         HomeRoot          = $homeRoot
+        HomeRootIssue     = $homeRootIssue
         ArchiveRoot       = [string] $section.archiveRoot
         KeepGroups        = @($section.keepGroups | Where-Object { $_ })
         ProtectedAccounts = @($section.protectedAccounts | Where-Object { $_ })
@@ -189,9 +196,10 @@ function Invoke-ADFlowLeaverRecord {
                 Undo = [ordered]@{ Action = 'MoveUser'; SamAccountName = $sam; TargetOu = [string] $user.ou } })
     }
     $archive = $null
+    if ($Settings.HomeRootIssue) { $warnings.Add($Settings.HomeRootIssue) }
     $homeFolder = Get-ADFlowHomeFolderPath -Root $Settings.HomeRoot -SamAccountName $sam
     if ($homeFolder) {
-        if (-not (Test-Path -LiteralPath $homeFolder -PathType Container)) {
+        if (-not (Test-ADFlowFolder -Path $homeFolder)) {
             $warnings.Add("Personal folder $homeFolder not found: nothing to archive")
         }
         elseif (-not $Settings.ArchiveRoot) {
