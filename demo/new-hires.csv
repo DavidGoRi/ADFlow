@@ -1,0 +1,13 @@
+EmployeeId;FirstName;LastName;Department;Title;Manager;StartDate
+E1001;María José;García López;IT;Helpdesk Technician;laura.sanchez;2026-12-01
+E1002;José Ángel;Peña Muñoz;Finance;Accountant;carlos.ruiz;2026-12-01
+E1003;Pedro;de la Fuente Ruiz;Sales;Sales Representative;;2026-12-01
+E1004;Íñigo;Martínez-Aragón;IT;Systems Administrator;laura.sanchez;2026-12-09
+E1005;Ana;García Lorenzo;Human Resources;HR Specialist;;2026-12-09
+E1006;Zoë;O'Connor;Marketing;Brand Manager;;2026-12-15
+E1007;Maximiliano;Fernández-Villaverde;Sales;Sales Representative;javier.moreno;2026-12-15
+E1008;Lucía;Gómez;Legal;Lawyer;;2026-12-15
+E1002;José;Peña;Finance;Accountant;;2026-12-01
+E0907;Laura;Sánchez Ortega;IT;Systems Administrator;;2026-01-12
+E1009;Sofía;;IT;Helpdesk Technician;;2026-13-01
+E1010;José Ángel;Peña Moreno;Finance;Accountant;;2026-12-01

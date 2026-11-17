@@ -1,0 +1,12 @@
+# Run logs and the simulated directory state: in a real deployment they hold
+# employee names, ids and account details. Never commit them.
+output/
+
+# Editors and OS
+.vscode/
+*.swp
+Thumbs.db
+desktop.ini
+
+# Release build output
+dist/

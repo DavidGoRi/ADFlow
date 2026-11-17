@@ -1,0 +1,54 @@
+{
+  "ous": [
+    "OU=Staff,DC=corp,DC=example,DC=com",
+    "OU=IT,OU=Staff,DC=corp,DC=example,DC=com",
+    "OU=Finance,OU=Staff,DC=corp,DC=example,DC=com",
+    "OU=Human Resources,OU=Staff,DC=corp,DC=example,DC=com",
+    "OU=Sales,OU=Staff,DC=corp,DC=example,DC=com",
+    "OU=Marketing,OU=Staff,DC=corp,DC=example,DC=com",
+    "OU=Leavers,DC=corp,DC=example,DC=com"
+  ],
+  "groups": [
+    { "name": "GG-AllStaff", "members": [ "ana.garcia", "ana.garcial", "carlos.ruiz", "laura.sanchez", "maria.garcia" ] },
+    { "name": "GG-IT-Helpdesk", "members": [ "maria.garcia" ] },
+    { "name": "GG-IT-Admins", "members": [ "laura.sanchez" ] },
+    { "name": "GG-VPN-Users", "members": [ "laura.sanchez", "maria.garcia" ] },
+    { "name": "GG-Finance-Users", "members": [ "carlos.ruiz" ] },
+    { "name": "GG-ERP-Users", "members": [ "carlos.ruiz" ] },
+    { "name": "GG-Sales-Users", "members": [ "ana.garcial" ] },
+    { "name": "GG-HR-Users", "members": [ "ana.garcia" ] },
+    { "name": "GG-Marketing-Users", "members": [ ] }
+  ],
+  "users": [
+    {
+      "samAccountName": "ana.garcia", "userPrincipalName": "ana.garcia@corp.example.com",
+      "givenName": "Ana", "surname": "García Pérez", "displayName": "Ana García Pérez",
+      "employeeId": "E0902", "department": "Human Resources", "title": "HR Specialist",
+      "ou": "OU=Human Resources,OU=Staff,DC=corp,DC=example,DC=com", "enabled": true
+    },
+    {
+      "samAccountName": "ana.garcial", "userPrincipalName": "ana.garcial@corp.example.com",
+      "givenName": "Ana", "surname": "García López", "displayName": "Ana García López",
+      "employeeId": "E0903", "department": "Sales", "title": "Sales Representative",
+      "ou": "OU=Sales,OU=Staff,DC=corp,DC=example,DC=com", "enabled": true
+    },
+    {
+      "samAccountName": "carlos.ruiz", "userPrincipalName": "carlos.ruiz@corp.example.com",
+      "givenName": "Carlos", "surname": "Ruiz Navarro", "displayName": "Carlos Ruiz Navarro",
+      "employeeId": "E0904", "department": "Finance", "title": "Finance Manager",
+      "ou": "OU=Finance,OU=Staff,DC=corp,DC=example,DC=com", "enabled": true
+    },
+    {
+      "samAccountName": "laura.sanchez", "userPrincipalName": "laura.sanchez@corp.example.com",
+      "givenName": "Laura", "surname": "Sánchez Ortega", "displayName": "Laura Sánchez Ortega",
+      "employeeId": "E0907", "department": "IT", "title": "IT Manager",
+      "ou": "OU=IT,OU=Staff,DC=corp,DC=example,DC=com", "enabled": true
+    },
+    {
+      "samAccountName": "maria.garcia", "userPrincipalName": "maria.garcia@corp.example.com",
+      "givenName": "María", "surname": "García Sanz", "displayName": "María García Sanz",
+      "employeeId": "E0901", "department": "IT", "title": "Helpdesk Technician",
+      "ou": "OU=IT,OU=Staff,DC=corp,DC=example,DC=com", "enabled": true
+    }
+  ]
+}
