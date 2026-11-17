@@ -2,6 +2,12 @@
 
 All notable changes to ADFlow are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Live demo on GitHub Pages (https://davidgori.github.io/ADFlow/), in English and Spanish: a real onboarding, offboarding and rollback on fictitious data, rebuilt weekly by `.github/workflows/demo.yml` with `tools/Build-Demo.ps1`.
+- Console GIF in the README, and `tools/Update-Screenshots.ps1` to regenerate every picture in `docs/` from the demo.
+
 ## [1.0.0] - 2026-11-17
 
 First stable release. Download `ADFlow-1.0.0.zip`, extract it and run `ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -DryRun`: the demo needs nothing else, not even a domain.

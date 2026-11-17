@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ADFlow</title>
+<style>
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; }
+  body { background: #0f1b2d; color: #e5e7eb; font-family: "Segoe UI", sans-serif; display: flex; }
+  .left { padding: 72px 0 0 80px; width: 640px; }
+  h1 { font-size: 104px; margin: 0; color: #93c5fd; letter-spacing: -2px; }
+  p.tag { font-size: 32px; line-height: 1.35; margin: 16px 0 36px; color: #f3f4f6; }
+  ul { list-style: none; padding: 0; margin: 0; font-size: 24px; line-height: 1.8; color: #cbd5e1; }
+  li::before { content: "\2713"; color: #86efac; margin-right: 14px; font-weight: 700; }
+  .foot { position: absolute; left: 80px; bottom: 44px; font-size: 22px; color: #94a3b8; }
+  .right { flex: 1; padding: 96px 72px 0 0; }
+  .flow { display: flex; flex-direction: column; gap: 18px; }
+  .card { background: #1a2738; border: 1px solid #2d3d52; border-radius: 14px; padding: 18px 24px; font-size: 22px; }
+  .card b { color: #93c5fd; }
+  .card small { display: block; color: #94a3b8; font-size: 18px; margin-top: 4px; font-family: Consolas, monospace; }
+  .arrow { text-align: center; color: #64748b; font-size: 26px; line-height: 1; }
+</style></head>
+<body>
+  <div class="left">
+    <h1>ADFlow</h1>
+    <p class="tag">Automated joiners and leavers for Active Directory, in PowerShell</p>
+    <ul>
+      <li>Unique user names, OUs and groups</li>
+      <li>NTFS home folders and welcome emails</li>
+      <li>Audit trail and one-command rollback</li>
+      <li>300+ Pester tests, no domain needed</li>
+    </ul>
+  </div>
+  <div class="right">
+    <div class="flow">
+      <div class="card"><b>HR CSV</b><small>María José García López · IT · Helpdesk</small></div>
+      <div class="arrow">&darr;</div>
+      <div class="card"><b>maria.garcial</b><small>OU=IT,OU=Staff · GG-IT-Helpdesk · H:\</small></div>
+      <div class="arrow">&darr;</div>
+      <div class="card"><b>report.html</b> &middot; audit.jsonl &middot; <b>Undo</b><small>every change can be reverted</small></div>
+    </div>
+  </div>
+  <div class="foot">github.com/DavidGoRi/ADFlow &middot; MIT</div>
+</body></html>

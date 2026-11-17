@@ -8,5 +8,8 @@ output/
 Thumbs.db
 desktop.ini
 
+# Demo site build output
+_site/
+
 # Release build output
 dist/

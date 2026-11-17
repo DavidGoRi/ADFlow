@@ -3,6 +3,7 @@
 [![CI](https://github.com/DavidGoRi/ADFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/DavidGoRi/ADFlow/actions/workflows/ci.yml)
 ![PowerShell 5.1](https://img.shields.io/badge/PowerShell-5.1-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
+[![Live demo](https://img.shields.io/badge/demo-live-2563eb)](https://davidgori.github.io/ADFlow/)
 
 *Leer en [español](README.es.md).*
 
@@ -17,6 +18,14 @@ out of their groups, moved to the leavers OU and with their files archived.
 Every action is logged with the information needed to undo it, and a single
 command reverts a whole run. Each run ends with an HTML report that can be
 attached to the ticket.
+
+### ▶ [Open the live demo](https://davidgori.github.io/ADFlow/)
+
+A real ADFlow cycle on fictitious data, step by step: the HR files, the console
+output, the HTML reports of the onboarding, the offboarding and the rollback, and
+a welcome email. GitHub Actions rebuilds it every week. Nothing to install.
+
+![ADFlow in the console: onboarding and offboarding of the demo files](docs/console.gif)
 
 > **Version 1.0.0.** Download `ADFlow-1.0.0.zip` from the
 > [releases](https://github.com/DavidGoRi/ADFlow/releases/latest), or clone the
@@ -386,14 +395,15 @@ Statuses: `Succeeded`, `Failed`, `Planned` (dry run), `WhatIf`, `Skipped`,
 
 ## Tests
 
-311 Pester tests cover name generation, passwords, settings, both HR files, the
+324 Pester tests cover name generation, passwords, settings, both HR files, the
 simulated directory, the action catalogue, folder archiving, the audit trail,
 onboarding, offboarding (protections, partial failures, idempotency), rollback
 (exact restoration, order, double-undo guard, failures), personal folders (the
 NTFS permissions are applied for real and read back), welcome drafts (headers,
 accents, no password), HTML reports (escaping, banners), the Active Directory
 provider (contract tests shared with the simulated directory), the lab script
-the entry script and the release zip (built, extracted and run).
+the entry script, the release zip (built, extracted and run) and the live demo
+site (every link works, nothing local leaks into it).
 The simulated directory gives every account and group a fictitious SID, so the
 folder permissions are real NTFS entries even without a domain.
 They also check that every script is UTF-8 with BOM (needed by Windows
@@ -452,6 +462,8 @@ src/Offboarding.ps1        offboarding
 src/Rollback.ps1           rollback
 tools/New-ADFlowLab.ps1    fills a lab domain with the sample data
 tools/Build-Release.ps1    builds ADFlow-<version>.zip and its checksum
+tools/Build-Demo.ps1       builds the live demo site (published by .github/workflows/demo.yml)
+tools/Update-Screenshots.ps1  regenerates the pictures in docs/ from the demo (Edge + ffmpeg)
 docs/LAB.md                test lab guide (Hyper-V + Windows Server Evaluation)
 tests/                     Pester tests, and the simulated ActiveDirectory module
 ```

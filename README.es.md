@@ -3,6 +3,7 @@
 [![CI](https://github.com/DavidGoRi/ADFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/DavidGoRi/ADFlow/actions/workflows/ci.yml)
 ![PowerShell 5.1](https://img.shields.io/badge/PowerShell-5.1-blue)
 ![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-green)
+[![Demo en vivo](https://img.shields.io/badge/demo-en%20vivo-2563eb)](https://davidgori.github.io/ADFlow/?lang=es)
 
 *Read in [English](README.md).*
 
@@ -18,6 +19,15 @@ su cuenta: deshabilitada, fuera de sus grupos, en la OU de bajas y con sus
 archivos archivados. Cada acción queda registrada con lo necesario para
 deshacerla, y una sola orden revierte una ejecución entera. Cada ejecución
 termina con un informe HTML que se puede adjuntar al ticket.
+
+### ▶ [Abrir la demo en vivo](https://davidgori.github.io/ADFlow/?lang=es)
+
+Un ciclo real de ADFlow con datos ficticios, paso a paso: los CSV de RR. HH., la
+salida de la consola, los informes HTML de las altas, las bajas y la reversión, y
+un correo de bienvenida. GitHub Actions la regenera cada semana. No hay que
+instalar nada.
+
+![ADFlow en la consola: altas y bajas de los archivos de la demo](docs/console.gif)
 
 > **Versión 1.0.0.** Descarga `ADFlow-1.0.0.zip` desde las
 > [versiones publicadas](https://github.com/DavidGoRi/ADFlow/releases/latest) o
@@ -392,7 +402,7 @@ personales.
 
 ## Tests
 
-311 tests de Pester cubren la generación de nombres, las contraseñas, la
+324 tests de Pester cubren la generación de nombres, las contraseñas, la
 configuración, los dos CSV, el directorio simulado, el catálogo de acciones, el
 archivado de carpetas, la auditoría, las altas, las bajas (protecciones, fallos a
 medias e idempotencia), la reversión (restauración exacta, orden, protección
@@ -400,8 +410,9 @@ contra deshacer dos veces y fallos), las carpetas personales (los permisos NTFS
 se aplican de verdad y se vuelven a leer), los borradores de bienvenida
 (cabeceras, tildes y ausencia de contraseña), los informes HTML (escapado y
 avisos), el proveedor de Active Directory (tests de contrato compartidos con el
-directorio simulado), el script del laboratorio, el script de entrada y el zip de la versión (se
-genera, se descomprime y se ejecuta). El
+directorio simulado), el script del laboratorio, el script de entrada, el zip de la versión (se
+genera, se descomprime y se ejecuta) y la web de la demo (todos los enlaces
+funcionan y no se cuela ningún dato local). El
 directorio simulado da a cada cuenta y grupo
 un SID ficticio, así que los permisos de las carpetas son entradas NTFS reales
 aunque no haya dominio. También comprueban
@@ -462,6 +473,8 @@ src/Offboarding.ps1        bajas
 src/Rollback.ps1           reversión
 tools/New-ADFlowLab.ps1    carga los datos de ejemplo en un dominio de laboratorio
 tools/Build-Release.ps1    genera ADFlow-<versión>.zip y su suma de comprobación
+tools/Build-Demo.ps1       genera la web de la demo (la publica .github/workflows/demo.yml)
+tools/Update-Screenshots.ps1  regenera las imágenes de docs/ a partir de la demo (Edge + ffmpeg)
 docs/LAB.es.md             guía del laboratorio (Hyper-V + Windows Server Evaluation)
 tests/                     tests de Pester y el módulo ActiveDirectory simulado
 ```
