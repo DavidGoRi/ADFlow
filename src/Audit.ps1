@@ -20,6 +20,8 @@
     The files are written with .NET so that -WhatIf does not skip the log.
 #>
 
+# The release version: tools/Build-Release.ps1 and the release workflow read it here
+$script:ADFlowVersion = '1.0.0'
 $script:ADFlowUtf8 = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
 
 function Initialize-ADFlowRun {
@@ -128,6 +130,7 @@ function Complete-ADFlowRun {
     }
     $summary = [pscustomobject][ordered]@{
         runId      = $Run.RunId
+        version    = $script:ADFlowVersion
         operation  = $Run.Operation
         mode       = $Run.Mode
         provider   = $Run.Provider

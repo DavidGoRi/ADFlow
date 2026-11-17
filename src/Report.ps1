@@ -102,7 +102,7 @@ function Export-ADFlowRunReport {
         'Onboarding' {
             $headers = 'Row', 'Employee', 'Name', 'User name', 'OU', 'Groups', 'Personal folder', 'Status', 'Notes'
             $rows = foreach ($item in $results) {
-                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td><code>{3}</code></td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td class="notes">{8}</td></tr>' -f
+                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td><code>{3}</code></td><td>{4}</td><td>{5}</td><td class="path">{6}</td><td>{7}</td><td class="notes">{8}</td></tr>' -f
                 (ConvertTo-ADFlowHtml $item.Row), (ConvertTo-ADFlowHtml $item.EmployeeId), (ConvertTo-ADFlowHtml $item.DisplayName),
                 (ConvertTo-ADFlowHtml $item.SamAccountName), (Get-ADFlowShortOu $item.Ou), (ConvertTo-ADFlowHtml @($item.Groups)),
                 (ConvertTo-ADFlowHtml $item.HomeFolder), (Get-ADFlowStatusChip $item.Status), (ConvertTo-ADFlowHtml $item.Message)
@@ -111,7 +111,7 @@ function Export-ADFlowRunReport {
         'Offboarding' {
             $headers = 'Row', 'Employee', 'Name', 'User name', 'Previous OU', 'Groups removed', 'Archived to', 'Status', 'Notes'
             $rows = foreach ($item in $results) {
-                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td><code>{3}</code></td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td class="notes">{8}</td></tr>' -f
+                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td><code>{3}</code></td><td>{4}</td><td>{5}</td><td class="path">{6}</td><td>{7}</td><td class="notes">{8}</td></tr>' -f
                 (ConvertTo-ADFlowHtml $item.Row), (ConvertTo-ADFlowHtml $item.EmployeeId), (ConvertTo-ADFlowHtml $item.DisplayName),
                 (ConvertTo-ADFlowHtml $item.SamAccountName), (Get-ADFlowShortOu $item.PreviousOu), (ConvertTo-ADFlowHtml @($item.Groups)),
                 (ConvertTo-ADFlowHtml $item.ArchivedTo), (Get-ADFlowStatusChip $item.Status), (ConvertTo-ADFlowHtml $item.Message)
@@ -159,6 +159,7 @@ function Export-ADFlowRunReport {
         ActionCount   = $entries.Count
         ActionRows    = @($actionRows) -join "`n"
         Generated     = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+        Version       = ConvertTo-ADFlowHtml $(if ($summary.version) { $summary.version } else { $script:ADFlowVersion })
     }
     $template = [IO.File]::ReadAllText((Join-Path -Path $PSScriptRoot -ChildPath 'report-template.html'))
     $html = Expand-ADFlowTemplate -Template $template -Values $values

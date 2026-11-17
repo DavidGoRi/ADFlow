@@ -19,12 +19,20 @@ archivos archivados. Cada acción queda registrada con lo necesario para
 deshacerla, y una sola orden revierte una ejecución entera. Cada ejecución
 termina con un informe HTML que se puede adjuntar al ticket.
 
-> **Estado: fase 4 de 5.** Las altas (con carpetas personales y correos de
-> bienvenida), las bajas, la reversión y el informe HTML funcionan de principio
-> a fin, con un directorio simulado o con un dominio real de Active Directory.
-> Una [guía de laboratorio](docs/LAB.es.md) monta un dominio de pruebas
-> gratuito en Hyper-V para probarlo.
+> **Versión 1.0.0.** Descarga `ADFlow-1.0.0.zip` desde las
+> [versiones publicadas](https://github.com/DavidGoRi/ADFlow/releases/latest) o
+> clona el repositorio. La demo funciona en cualquier Windows 10/11, sin dominio;
+> una [guía de laboratorio](docs/LAB.es.md) monta un dominio de pruebas gratuito
+> en Hyper-V para probarlo contra un Active Directory real.
 
+![Informe HTML de unas altas](docs/onboarding-report.png)
+
+| Informe de bajas | Borrador del correo de bienvenida |
+| --- | --- |
+| ![Informe HTML de unas bajas](docs/offboarding-report.png) | ![Correo de bienvenida para el responsable](docs/welcome-email.png) |
+
+*Todas las personas, identificadores y dominios de las capturas y de los datos de
+ejemplo son ficticios. El informe y los mensajes están en inglés, como el código.*
 ## Por qué está hecho así
 
 La lógica nunca llama directamente al módulo ActiveDirectory. Habla con un
@@ -384,7 +392,7 @@ personales.
 
 ## Tests
 
-300 tests de Pester cubren la generación de nombres, las contraseñas, la
+311 tests de Pester cubren la generación de nombres, las contraseñas, la
 configuración, los dos CSV, el directorio simulado, el catálogo de acciones, el
 archivado de carpetas, la auditoría, las altas, las bajas (protecciones, fallos a
 medias e idempotencia), la reversión (restauración exacta, orden, protección
@@ -392,7 +400,8 @@ contra deshacer dos veces y fallos), las carpetas personales (los permisos NTFS
 se aplican de verdad y se vuelven a leer), los borradores de bienvenida
 (cabeceras, tildes y ausencia de contraseña), los informes HTML (escapado y
 avisos), el proveedor de Active Directory (tests de contrato compartidos con el
-directorio simulado), el script del laboratorio y el script de entrada. El
+directorio simulado), el script del laboratorio, el script de entrada y el zip de la versión (se
+genera, se descomprime y se ejecuta). El
 directorio simulado da a cada cuenta y grupo
 un SID ficticio, así que los permisos de las carpetas son entradas NTFS reales
 aunque no haya dominio. También comprueban
@@ -424,7 +433,9 @@ GitHub Actions ejecuta ambos en Windows PowerShell 5.1 con cada *push*.
    RSAT, tests de contrato para los dos proveedores, `tools/New-ADFlowLab.ps1` y
    una [guía](docs/LAB.es.md) para montar un dominio de pruebas con Windows
    Server Evaluation en Hyper-V.
-5. **Pulido**: capturas, registro de cambios y versión 1.0.0.
+5. **Versión 1.0.0** ✅: capturas, registro de cambios y un zip de la versión con
+   su suma SHA-256, generado y publicado por GitHub Actions a partir de la
+   etiqueta de versión.
 
 ## Estructura
 
@@ -450,6 +461,7 @@ src/Onboarding.ps1         altas
 src/Offboarding.ps1        bajas
 src/Rollback.ps1           reversión
 tools/New-ADFlowLab.ps1    carga los datos de ejemplo en un dominio de laboratorio
+tools/Build-Release.ps1    genera ADFlow-<versión>.zip y su suma de comprobación
 docs/LAB.es.md             guía del laboratorio (Hyper-V + Windows Server Evaluation)
 tests/                     tests de Pester y el módulo ActiveDirectory simulado
 ```

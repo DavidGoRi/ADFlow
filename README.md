@@ -18,11 +18,19 @@ Every action is logged with the information needed to undo it, and a single
 command reverts a whole run. Each run ends with an HTML report that can be
 attached to the ticket.
 
-> **Status: phase 4 of 5.** Onboarding (with personal folders and welcome
-> emails), offboarding, rollback and the HTML report work end to end, with a
-> simulated directory or with a real Active Directory domain. A
-> [lab guide](docs/LAB.md) builds a free test domain in Hyper-V to try it.
+> **Version 1.0.0.** Download `ADFlow-1.0.0.zip` from the
+> [releases](https://github.com/DavidGoRi/ADFlow/releases/latest), or clone the
+> repository. The demo runs on any Windows 10/11 computer, without a domain; a
+> [lab guide](docs/LAB.md) builds a free test domain in Hyper-V to try it against
+> real Active Directory.
 
+![HTML report of an onboarding run](docs/onboarding-report.png)
+
+| Offboarding report | Welcome email draft |
+| --- | --- |
+| ![HTML report of an offboarding run](docs/offboarding-report.png) | ![Welcome email for the manager](docs/welcome-email.png) |
+
+*All people, ids and domains in the screenshots and the sample data are fictitious.*
 ## Why it is built this way
 
 The logic never calls the ActiveDirectory module directly. It talks to a
@@ -378,14 +386,14 @@ Statuses: `Succeeded`, `Failed`, `Planned` (dry run), `WhatIf`, `Skipped`,
 
 ## Tests
 
-300 Pester tests cover name generation, passwords, settings, both HR files, the
+311 Pester tests cover name generation, passwords, settings, both HR files, the
 simulated directory, the action catalogue, folder archiving, the audit trail,
 onboarding, offboarding (protections, partial failures, idempotency), rollback
 (exact restoration, order, double-undo guard, failures), personal folders (the
 NTFS permissions are applied for real and read back), welcome drafts (headers,
 accents, no password), HTML reports (escaping, banners), the Active Directory
 provider (contract tests shared with the simulated directory), the lab script
-and the entry script.
+the entry script and the release zip (built, extracted and run).
 The simulated directory gives every account and group a fictitious SID, so the
 folder permissions are real NTFS entries even without a domain.
 They also check that every script is UTF-8 with BOM (needed by Windows
@@ -416,7 +424,8 @@ GitHub Actions runs both on Windows PowerShell 5.1 for every push.
    contract tests for both providers, `tools/New-ADFlowLab.ps1` and a
    [guide](docs/LAB.md) to build a test domain with Windows Server Evaluation in
    Hyper-V.
-5. **Polish** — screenshots, changelog and version 1.0.0.
+5. **Release 1.0.0** ✅ — screenshots, changelog, and a release zip with its
+   SHA-256 checksum, built and published by GitHub Actions from the version tag.
 
 ## Project layout
 
@@ -442,6 +451,7 @@ src/Onboarding.ps1         onboarding
 src/Offboarding.ps1        offboarding
 src/Rollback.ps1           rollback
 tools/New-ADFlowLab.ps1    fills a lab domain with the sample data
+tools/Build-Release.ps1    builds ADFlow-<version>.zip and its checksum
 docs/LAB.md                test lab guide (Hyper-V + Windows Server Evaluation)
 tests/                     Pester tests, and the simulated ActiveDirectory module
 ```
