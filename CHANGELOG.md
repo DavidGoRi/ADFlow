@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Phase 4: Active Directory provider (`-Provider ActiveDirectory`, `-Server`,
+  `-Credential`) on top of RSAT, with escaped LDAP filters.
+- Contract tests shared by both providers, against a simulated
+  ActiveDirectory module (tests/FakeActiveDirectory.psm1).
+- `tools/New-ADFlowLab.ps1` and a lab guide (docs/LAB.md) for a test domain
+  with Windows Server Evaluation in Hyper-V.
 - Phase 3: personal folder at onboarding, created with protected NTFS
   permissions (SYSTEM, Administrators and admin groups full control, the user
   Modify) and removed on rollback only when empty.

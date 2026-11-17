@@ -18,9 +18,10 @@
 
     Every action goes to an audit trail under output\runs\<RunId>\.
 
-    This version works with the simulated directory (-Provider Mock), so it
-    runs on any Windows computer without a domain. The Active Directory
-    provider comes in a later phase (see the README).
+    -Provider Mock (the default) uses a simulated directory, so it runs on any
+    Windows computer without a domain. -Provider ActiveDirectory works on a
+    real domain through the RSAT ActiveDirectory module (see docs/LAB.md to
+    try it in a test domain first).
 
 .EXAMPLE
     .\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -DryRun
@@ -33,6 +34,10 @@
 .EXAMPLE
     .\ADFlow.ps1 -Action Undo -RunId 20261117-174300-56fe
     Reverts the changes of that run.
+
+.EXAMPLE
+    .\ADFlow.ps1 -Action Onboard -CsvPath .\hires.csv -Provider ActiveDirectory -Server dc01.corp.example.com -DryRun
+    Plans the onboarding against a real domain controller.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -42,7 +47,10 @@ param(
     # Run to revert (Undo) or to report on again (Report): a folder name under -LogPath
     [string] $RunId,
     [string] $ConfigPath = (Join-Path -Path $PSScriptRoot -ChildPath 'config\adflow.json'),
-    [ValidateSet('Mock')] [string] $Provider = 'Mock',
+    [ValidateSet('Mock', 'ActiveDirectory')] [string] $Provider = 'Mock',
+    # ActiveDirectory provider: domain controller and account (default: current ones)
+    [string] $Server,
+    [pscredential] $Credential,
     [string] $MockSeedPath = (Join-Path -Path $PSScriptRoot -ChildPath 'demo\directory.json'),
     [string] $MockStatePath = (Join-Path -Path $PSScriptRoot -ChildPath 'output\mock-directory.json'),
     [string] $LogPath = (Join-Path -Path $PSScriptRoot -ChildPath 'output\runs'),
@@ -59,7 +67,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-foreach ($file in 'Naming', 'Password', 'Config', 'HRFile', 'MockDirectory', 'Audit', 'Actions', 'HomeFolder',
+foreach ($file in 'Naming', 'Password', 'Config', 'HRFile', 'MockDirectory', 'ADDirectory', 'Audit', 'Actions', 'HomeFolder',
     'Welcome', 'Report', 'Onboarding', 'Offboarding', 'Rollback') {
     . (Join-Path -Path $PSScriptRoot -ChildPath "src\$file.ps1")
 }
@@ -90,6 +98,12 @@ if ($ResetMockDirectory -and (Test-Path -Path $MockStatePath)) {
 }
 $directory = switch ($Provider) {
     'Mock' { Open-ADFlowMockDirectory -SeedPath $MockSeedPath -StatePath $MockStatePath }
+    'ActiveDirectory' {
+        $adParameters = @{}
+        if ($Server) { $adParameters.Server = $Server }
+        if ($Credential) { $adParameters.Credential = $Credential }
+        Open-ADFlowADDirectory @adParameters
+    }
 }
 
 $results = @(switch ($Action) {

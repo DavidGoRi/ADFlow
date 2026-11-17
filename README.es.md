@@ -19,10 +19,11 @@ archivos archivados. Cada acción queda registrada con lo necesario para
 deshacerla, y una sola orden revierte una ejecución entera. Cada ejecución
 termina con un informe HTML que se puede adjuntar al ticket.
 
-> **Estado: fase 3 de 5.** Las altas (con carpetas personales y correos de
+> **Estado: fase 4 de 5.** Las altas (con carpetas personales y correos de
 > bienvenida), las bajas, la reversión y el informe HTML funcionan de principio
-> a fin contra un directorio simulado. Después llegan el proveedor real de
-> Active Directory y la guía del laboratorio (ver la [hoja de ruta](#hoja-de-ruta)).
+> a fin, con un directorio simulado o con un dominio real de Active Directory.
+> Una [guía de laboratorio](docs/LAB.es.md) monta un dominio de pruebas
+> gratuito en Hyper-V para probarlo.
 
 ## Por qué está hecho así
 
@@ -33,11 +34,22 @@ La lógica nunca llama directamente al módulo ActiveDirectory. Habla con un
 | Proveedor | Para qué | Estado |
 | --- | --- | --- |
 | `Mock` | tests, la demo y cualquier PC sin dominio | listo |
-| `ActiveDirectory` | un dominio real, con RSAT (`New-ADUser`, `Add-ADGroupMember`…) | fase 4 |
+| `ActiveDirectory` | un dominio real, con RSAT (`New-ADUser`, `Add-ADGroupMember`…) | listo |
 
 Así, todas las reglas (nombres, OU, grupos, validación, protecciones,
 idempotencia, registro y reversión) se prueban con Pester en un Windows normal y
 en GitHub Actions, sin controlador de dominio.
+
+El proveedor de Active Directory también se prueba: los tests cargan un pequeño
+módulo ActiveDirectory simulado ([`tests/FakeActiveDirectory.psm1`](tests/FakeActiveDirectory.psm1))
+y pasan **los mismos tests de contrato** a los dos proveedores, incluido el ciclo
+completo de altas, bajas y reversión. Además comprueban lo que solo importa en
+AD: todos los valores de los filtros LDAP se escapan (un nombre como `*)(cn=*` es
+texto normal), el servidor y la credencial llegan a todos los cmdlets, los
+borrados nunca piden confirmación, los valores vacíos no se pasan a `New-ADUser`
+y una segunda "Ana Soto" en la misma OU recibe un CN único. Lo que solo se ve en
+un dominio real (permisos de la cuenta de servicio, replicación, directivas de
+contraseñas) es para lo que sirve el [laboratorio](docs/LAB.es.md).
 
 Las bajas y la reversión describen cada cambio como datos, por ejemplo
 `@{ Action = 'MoveUser'; SamAccountName = 'ana.soto'; TargetOu = '…' }`. Ese mismo
@@ -48,7 +60,7 @@ fiable: deshacer una ejecución es aplicar sus acciones inversas.
 ```
 CSV de altas ─► Import-ADFlowHireFile ───► Invoke-ADFlowOnboarding ──┐
 CSV de bajas ─► Import-ADFlowLeaverFile ─► Invoke-ADFlowOffboarding ─┼─► proveedor de directorio ── Mock (JSON)
-configuración ► Get-ADFlowConfig                                     │   (Invoke-ADFlowAction)     └ ActiveDirectory (fase 4)
+configuración ► Get-ADFlowConfig                                     │   (Invoke-ADFlowAction)     └ ActiveDirectory (RSAT)
                                                                      │
                         auditoría (audit.jsonl + undo) ◄─────────────┘
                                    │
@@ -234,6 +246,24 @@ Run 20261117-175912-c371: 12 Reverted
 
 Los mensajes del programa están en inglés, como el código.
 
+### Contra Active Directory
+
+Requisitos: el módulo ActiveDirectory (RSAT, o ejecutarlo en un controlador de
+dominio) y una cuenta que pueda crear, cambiar, mover y borrar usuarios en las
+OU de la configuración y gestionar sus grupos. Adapta
+[`config/adflow.json`](config/adflow.json) a tu dominio y empieza con una
+simulación:
+
+```powershell
+.\ADFlow.ps1 -Action Onboard -CsvPath .\altas.csv -Provider ActiveDirectory -HomeRoot \\fs01\home$ -DryRun
+.\ADFlow.ps1 -Action Onboard -CsvPath .\altas.csv -Provider ActiveDirectory -HomeRoot \\fs01\home$ `
+    -Server dc01.corp.example.com -Credential (Get-Credential)
+```
+
+Para probarlo antes sin riesgo, sigue la [guía del laboratorio](docs/LAB.es.md):
+un dominio de pruebas gratuito en Hyper-V, cargado con los datos de ejemplo por
+`tools/New-ADFlowLab.ps1`.
+
 ### Parámetros de `ADFlow.ps1`
 
 | Parámetro | Por defecto | Descripción |
@@ -242,7 +272,8 @@ Los mensajes del programa están en inglés, como el código.
 | `-CsvPath` | | CSV de RR. HH., para `Onboard` y `Offboard` |
 | `-RunId` | | Ejecución que se revierte (`Undo`) o cuyo informe se regenera (`Report`) |
 | `-ConfigPath` | `config\adflow.json` | Dominio, OU, puestos, grupos y reglas de bajas |
-| `-Provider` | `Mock` | Proveedor de directorio |
+| `-Provider` | `Mock` | `Mock` (simulado) o `ActiveDirectory` |
+| `-Server`, `-Credential` | los actuales | Controlador de dominio y cuenta, para `ActiveDirectory` |
 | `-MockSeedPath` | `demo\directory.json` | Estado inicial del directorio simulado |
 | `-MockStatePath` | `output\mock-directory.json` | Dónde guarda sus cambios el directorio simulado |
 | `-LogPath` | `output\runs` | Carpeta de la auditoría |
@@ -353,14 +384,16 @@ personales.
 
 ## Tests
 
-241 tests de Pester cubren la generación de nombres, las contraseñas, la
+300 tests de Pester cubren la generación de nombres, las contraseñas, la
 configuración, los dos CSV, el directorio simulado, el catálogo de acciones, el
 archivado de carpetas, la auditoría, las altas, las bajas (protecciones, fallos a
 medias e idempotencia), la reversión (restauración exacta, orden, protección
 contra deshacer dos veces y fallos), las carpetas personales (los permisos NTFS
 se aplican de verdad y se vuelven a leer), los borradores de bienvenida
 (cabeceras, tildes y ausencia de contraseña), los informes HTML (escapado y
-avisos) y el script de entrada. El directorio simulado da a cada cuenta y grupo
+avisos), el proveedor de Active Directory (tests de contrato compartidos con el
+directorio simulado), el script del laboratorio y el script de entrada. El
+directorio simulado da a cada cuenta y grupo
 un SID ficticio, así que los permisos de las carpetas son entradas NTFS reales
 aunque no haya dominio. También comprueban
 que todos los scripts están en UTF-8 con BOM (Windows PowerShell 5.1 lo necesita
@@ -387,9 +420,10 @@ GitHub Actions ejecuta ambos en Windows PowerShell 5.1 con cada *push*.
 3. **Carpetas personales, correo de bienvenida e informe** ✅: carpeta personal
    con permisos NTFS al dar de alta, borrador del correo de bienvenida desde una
    plantilla e informe HTML de cada ejecución.
-4. **Proveedor de Active Directory y laboratorio**: los mismos métodos sobre
-   RSAT y una guía para montar un dominio de pruebas con Windows Server
-   Evaluation en Hyper-V.
+4. **Proveedor de Active Directory y laboratorio** ✅: los mismos métodos sobre
+   RSAT, tests de contrato para los dos proveedores, `tools/New-ADFlowLab.ps1` y
+   una [guía](docs/LAB.es.md) para montar un dominio de pruebas con Windows
+   Server Evaluation en Hyper-V.
 5. **Pulido**: capturas, registro de cambios y versión 1.0.0.
 
 ## Estructura
@@ -406,6 +440,7 @@ src/Password.ps1           contraseñas temporales
 src/Config.ps1             configuración, departamentos y puestos
 src/HRFile.ps1             lectura y validación de los CSV de RR. HH.
 src/MockDirectory.ps1      proveedor de directorio simulado
+src/ADDirectory.ps1        proveedor de Active Directory (RSAT)
 src/Actions.ps1            cambios descritos como datos y cómo aplicarlos
 src/HomeFolder.ps1         carpetas personales: permisos, creación y archivado
 src/Welcome.ps1            borradores del correo de bienvenida
@@ -414,7 +449,9 @@ src/Audit.ps1              auditoría
 src/Onboarding.ps1         altas
 src/Offboarding.ps1        bajas
 src/Rollback.ps1           reversión
-tests/                     tests de Pester
+tools/New-ADFlowLab.ps1    carga los datos de ejemplo en un dominio de laboratorio
+docs/LAB.es.md             guía del laboratorio (Hyper-V + Windows Server Evaluation)
+tests/                     tests de Pester y el módulo ActiveDirectory simulado
 ```
 
 ## Licencia

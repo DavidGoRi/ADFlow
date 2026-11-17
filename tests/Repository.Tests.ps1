@@ -5,7 +5,7 @@ param()
 
 BeforeDiscovery {
     $root = Split-Path -Path $PSScriptRoot -Parent
-    $scripts = @(Get-ChildItem -Path $root -Recurse -Include '*.ps1', '*.psd1' -File |
+    $scripts = @(Get-ChildItem -Path $root -Recurse -Include '*.ps1', '*.psd1', '*.psm1' -File |
             Where-Object { $_.FullName -notlike '*\output\*' } |
             ForEach-Object { @{ Name = $_.FullName.Substring($root.Length + 1); Path = $_.FullName } })
 }

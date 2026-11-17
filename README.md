@@ -18,10 +18,10 @@ Every action is logged with the information needed to undo it, and a single
 command reverts a whole run. Each run ends with an HTML report that can be
 attached to the ticket.
 
-> **Status: phase 3 of 5.** Onboarding (with personal folders and welcome
-> emails), offboarding, rollback and the HTML report work end to end against a
-> simulated directory. The real Active Directory provider and the lab guide
-> follow (see the [roadmap](#roadmap)).
+> **Status: phase 4 of 5.** Onboarding (with personal folders and welcome
+> emails), offboarding, rollback and the HTML report work end to end, with a
+> simulated directory or with a real Active Directory domain. A
+> [lab guide](docs/LAB.md) builds a free test domain in Hyper-V to try it.
 
 ## Why it is built this way
 
@@ -33,11 +33,22 @@ implement it:
 | Provider | Used for | Status |
 | --- | --- | --- |
 | `Mock` | tests, the demo, any PC without a domain | ready |
-| `ActiveDirectory` | a real domain, through RSAT (`New-ADUser`, `Add-ADGroupMember`…) | phase 4 |
+| `ActiveDirectory` | a real domain, through RSAT (`New-ADUser`, `Add-ADGroupMember`…) | ready |
 
 Because of that, every rule (names, OUs, groups, validation, protections,
 idempotency, logging, rollback) is tested with Pester on a normal Windows
 computer and in GitHub Actions, without a domain controller.
+
+The Active Directory provider is tested too: the tests load a small simulated
+ActiveDirectory module ([`tests/FakeActiveDirectory.psm1`](tests/FakeActiveDirectory.psm1))
+and run the **same contract tests** against both providers, including the whole
+onboarding → offboarding → rollback cycle. They also check what only matters in
+AD: every LDAP filter value is escaped (a name like `*)(cn=*` is plain text), the
+server and credential reach every cmdlet, deletions never ask for confirmation,
+empty values are left out of `New-ADUser`, and a second "Ana Soto" in the same OU
+gets a unique CN. Behaviour that only a real domain shows (rights of the
+service account, replication, password policies) is what the
+[lab](docs/LAB.md) is for.
 
 Offboarding and rollback describe every change as data, for example
 `@{ Action = 'MoveUser'; SamAccountName = 'ana.soto'; TargetOu = '…' }`. The
@@ -48,7 +59,7 @@ rollback reliable: undoing a run is replaying its reverse actions.
 ```
 HR CSV ──► Import-ADFlowHireFile ───► Invoke-ADFlowOnboarding ──┐
 leavers ─► Import-ADFlowLeaverFile ─► Invoke-ADFlowOffboarding ─┼─► directory provider ── Mock (JSON)
-settings ► Get-ADFlowConfig                                     │   (Invoke-ADFlowAction) └ ActiveDirectory (phase 4)
+settings ► Get-ADFlowConfig                                     │   (Invoke-ADFlowAction) └ ActiveDirectory (RSAT)
                                                                 │
                       audit trail (audit.jsonl + undo) ◄────────┘
                                  │
@@ -231,6 +242,23 @@ Reverted  #2    SetEnabled         ana.garcial           Enable account
 Run 20261117-175912-c371: 12 Reverted
 ```
 
+### Against Active Directory
+
+Requirements: the ActiveDirectory module (RSAT, or run it on a domain
+controller) and an account that can create, change, move and delete users in the
+OUs of the settings and manage their groups. Adapt
+[`config/adflow.json`](config/adflow.json) to your domain, and start with a dry
+run:
+
+```powershell
+.\ADFlow.ps1 -Action Onboard -CsvPath .\hires.csv -Provider ActiveDirectory -HomeRoot \\fs01\home$ -DryRun
+.\ADFlow.ps1 -Action Onboard -CsvPath .\hires.csv -Provider ActiveDirectory -HomeRoot \\fs01\home$ `
+    -Server dc01.corp.example.com -Credential (Get-Credential)
+```
+
+To try it safely first, follow the [lab guide](docs/LAB.md): a free test domain
+in Hyper-V, filled with the sample data by `tools/New-ADFlowLab.ps1`.
+
 ### Parameters of `ADFlow.ps1`
 
 | Parameter | Default | Description |
@@ -239,7 +267,8 @@ Run 20261117-175912-c371: 12 Reverted
 | `-CsvPath` | | HR file, for `Onboard` and `Offboard` |
 | `-RunId` | | Run to revert (`Undo`) or to report on again (`Report`) |
 | `-ConfigPath` | `config\adflow.json` | Domain, OUs, roles, groups and offboarding rules |
-| `-Provider` | `Mock` | Directory provider |
+| `-Provider` | `Mock` | `Mock` (simulated) or `ActiveDirectory` |
+| `-Server`, `-Credential` | current ones | Domain controller and account, for `ActiveDirectory` |
 | `-MockSeedPath` | `demo\directory.json` | Starting state of the simulated directory |
 | `-MockStatePath` | `output\mock-directory.json` | Where the simulated directory keeps its changes |
 | `-LogPath` | `output\runs` | Audit trail folder |
@@ -349,12 +378,14 @@ Statuses: `Succeeded`, `Failed`, `Planned` (dry run), `WhatIf`, `Skipped`,
 
 ## Tests
 
-241 Pester tests cover name generation, passwords, settings, both HR files, the
+300 Pester tests cover name generation, passwords, settings, both HR files, the
 simulated directory, the action catalogue, folder archiving, the audit trail,
 onboarding, offboarding (protections, partial failures, idempotency), rollback
 (exact restoration, order, double-undo guard, failures), personal folders (the
 NTFS permissions are applied for real and read back), welcome drafts (headers,
-accents, no password), HTML reports (escaping, banners) and the entry script.
+accents, no password), HTML reports (escaping, banners), the Active Directory
+provider (contract tests shared with the simulated directory), the lab script
+and the entry script.
 The simulated directory gives every account and group a fictitious SID, so the
 folder permissions are real NTFS entries even without a domain.
 They also check that every script is UTF-8 with BOM (needed by Windows
@@ -381,8 +412,10 @@ GitHub Actions runs both on Windows PowerShell 5.1 for every push.
 3. **Home folders, welcome email and report** ✅ — personal folder with NTFS
    permissions at onboarding, welcome email draft from a template and an HTML
    report of each run.
-4. **Active Directory provider and lab** — the same methods on top of RSAT, and
-   a guide to build a test domain with Windows Server Evaluation in Hyper-V.
+4. **Active Directory provider and lab** ✅ — the same methods on top of RSAT,
+   contract tests for both providers, `tools/New-ADFlowLab.ps1` and a
+   [guide](docs/LAB.md) to build a test domain with Windows Server Evaluation in
+   Hyper-V.
 5. **Polish** — screenshots, changelog and version 1.0.0.
 
 ## Project layout
@@ -399,6 +432,7 @@ src/Password.ps1           temporary passwords
 src/Config.ps1             settings, departments and roles
 src/HRFile.ps1             HR file reading and validation
 src/MockDirectory.ps1      simulated directory provider
+src/ADDirectory.ps1        Active Directory provider (RSAT)
 src/Actions.ps1            changes described as data, and how to run them
 src/HomeFolder.ps1         personal folders: permissions, creation and archiving
 src/Welcome.ps1            welcome email drafts
@@ -407,7 +441,9 @@ src/Audit.ps1              audit trail
 src/Onboarding.ps1         onboarding
 src/Offboarding.ps1        offboarding
 src/Rollback.ps1           rollback
-tests/                     Pester tests
+tools/New-ADFlowLab.ps1    fills a lab domain with the sample data
+docs/LAB.md                test lab guide (Hyper-V + Windows Server Evaluation)
+tests/                     Pester tests, and the simulated ActiveDirectory module
 ```
 
 ## License

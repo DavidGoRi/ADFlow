@@ -2,7 +2,7 @@
 # Loaded by every test file in BeforeAll: the ADFlow functions and a few helpers.
 
 $script:repoRoot = Split-Path -Path $PSScriptRoot -Parent
-foreach ($file in 'Naming', 'Password', 'Config', 'HRFile', 'MockDirectory', 'Audit', 'Actions', 'HomeFolder',
+foreach ($file in 'Naming', 'Password', 'Config', 'HRFile', 'MockDirectory', 'ADDirectory', 'Audit', 'Actions', 'HomeFolder',
     'Welcome', 'Report', 'Onboarding', 'Offboarding', 'Rollback') {
     . (Join-Path -Path $script:repoRoot -ChildPath "src\$file.ps1")
 }
