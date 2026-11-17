@@ -6,9 +6,12 @@
     "OU=Human Resources,OU=Staff,DC=corp,DC=example,DC=com",
     "OU=Sales,OU=Staff,DC=corp,DC=example,DC=com",
     "OU=Marketing,OU=Staff,DC=corp,DC=example,DC=com",
-    "OU=Leavers,DC=corp,DC=example,DC=com"
+    "OU=Leavers,DC=corp,DC=example,DC=com",
+    "OU=Admins,DC=corp,DC=example,DC=com"
   ],
   "groups": [
+    { "name": "Domain Users", "members": [ "adm.laura", "administrator", "ana.garcia", "ana.garcial", "carlos.ruiz", "laura.sanchez", "maria.garcia", "pablo.ortiz" ] },
+    { "name": "Domain Admins", "members": [ "adm.laura", "administrator" ] },
     { "name": "GG-AllStaff", "members": [ "ana.garcia", "ana.garcial", "carlos.ruiz", "laura.sanchez", "maria.garcia" ] },
     { "name": "GG-IT-Helpdesk", "members": [ "maria.garcia" ] },
     { "name": "GG-IT-Admins", "members": [ "laura.sanchez" ] },
@@ -20,6 +23,24 @@
     { "name": "GG-Marketing-Users", "members": [ ] }
   ],
   "users": [
+    {
+      "samAccountName": "adm.laura", "userPrincipalName": "adm.laura@corp.example.com",
+      "givenName": "Laura", "surname": "Sánchez Ortega", "displayName": "Laura Sánchez Ortega (admin)",
+      "employeeId": "", "department": "IT", "title": "IT Manager",
+      "ou": "OU=Admins,DC=corp,DC=example,DC=com", "enabled": true
+    },
+    {
+      "samAccountName": "administrator", "userPrincipalName": "administrator@corp.example.com",
+      "displayName": "Administrator", "employeeId": "",
+      "ou": "OU=Admins,DC=corp,DC=example,DC=com", "enabled": true
+    },
+    {
+      "samAccountName": "pablo.ortiz", "userPrincipalName": "pablo.ortiz@corp.example.com",
+      "givenName": "Pablo", "surname": "Ortiz Vega", "displayName": "Pablo Ortiz Vega",
+      "employeeId": "E0899", "department": "Sales", "title": "Sales Representative",
+      "description": "Left on 2026-10-31 (Resignation) - ADFlow 20261031-090000-0a1b",
+      "ou": "OU=Leavers,DC=corp,DC=example,DC=com", "enabled": false
+    },
     {
       "samAccountName": "ana.garcia", "userPrincipalName": "ana.garcia@corp.example.com",
       "givenName": "Ana", "surname": "García Pérez", "displayName": "Ana García Pérez",

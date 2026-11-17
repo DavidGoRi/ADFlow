@@ -227,14 +227,3 @@ function Complete-ADFlowResult {
     if (-not $Result.Message -and $Result.Warnings.Count) { $Result.Message = $Result.Warnings -join '; ' }
     return $Result
 }
-
-function Get-ADFlowErrorMessage {
-    # The message of the original error: calling a provider method wraps it
-    # in "Exception calling ... with ... argument(s)"
-    param([Management.Automation.ErrorRecord] $ErrorRecord)
-    $exception = $ErrorRecord.Exception
-    while ($exception -is [Management.Automation.MethodInvocationException] -and $exception.InnerException) {
-        $exception = $exception.InnerException
-    }
-    return $exception.Message
-}

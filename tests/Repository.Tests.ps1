@@ -64,4 +64,28 @@ Describe 'ADFlow.ps1' {
         $third = & $script -Action Onboard -CsvPath $demoCsvPath -PassThru -MockStatePath $state -LogPath $logs -ResetMockDirectory 6> $null
         @($third | Where-Object Status -eq 'Created').Count | Should -Be 8
     }
+
+    It 'offboards the demo leavers and undoes the run' {
+        $common = @{
+            MockStatePath = Join-Path -Path $TestDrive -ChildPath 'mock-leavers.json'
+            LogPath       = Join-Path -Path $TestDrive -ChildPath 'runs-leavers'
+            HomeRoot      = Join-Path -Path $TestDrive -ChildPath 'home'
+            ArchiveRoot   = Join-Path -Path $TestDrive -ChildPath 'archive'
+        }
+        $script = Join-Path $repoRoot 'ADFlow.ps1'
+        $leavers = Join-Path $repoRoot 'demo\leavers.csv'
+        $done = & $script -Action Offboard -CsvPath $leavers -PassThru @common 6> $null
+        @($done | Where-Object Status -eq 'Offboarded').Count | Should -Be 2
+        $undo = & $script -Action Undo -RunId $done[0].RunId -PassThru @common 6> $null
+        @($undo | Where-Object Status -eq 'Reverted').Count | Should -BeGreaterThan 0
+        @($undo | Where-Object Status -ne 'Reverted').Count | Should -Be 0
+        $state = [IO.File]::ReadAllText($common.MockStatePath) | ConvertFrom-Json
+        @($state.users | Where-Object { $_.samAccountName -eq 'carlos.ruiz' })[0].enabled | Should -BeTrue
+    }
+
+    It 'asks for the parameters each action needs' {
+        $script = Join-Path $repoRoot 'ADFlow.ps1'
+        { & $script -Action Offboard 6> $null } | Should -Throw '*needs -CsvPath*'
+        { & $script -Action Undo 6> $null } | Should -Throw '*needs -RunId*'
+    }
 }

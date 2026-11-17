@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Phase 2: offboarding from an HR file of leavers (by `EmployeeId` or
+  `SamAccountName`): records the groups, disables the account, writes the
+  leave reason, removes the groups except `keepGroups`, moves it to the leavers
+  OU and archives the personal folder.
+- Protected accounts and protected groups that offboarding never touches.
+- `Undo-ADFlowRun` and `-Action Undo`: replays the reverse actions of a live run
+  from the audit trail, with its own audit trail and a guard against undoing a
+  run twice.
+- Changes described as data (`Invoke-ADFlowAction`), shared by offboarding and
+  rollback.
 - Phase 1: onboarding from an HR CSV file against a replaceable directory
   provider, with a simulated (`Mock`) provider for tests and the demo.
 - Unique `sAMAccountName` generation: accent folding, surname particles,

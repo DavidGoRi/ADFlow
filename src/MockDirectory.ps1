@@ -15,7 +15,16 @@
       NewUser(spec)                     creates a user from a hashtable
       AddGroupMember(group, sam)        adds a user to a group
       GetGroupMembers(group)            the sAMAccountNames in a group
+      GetUserGroups(sam)                the groups a user belongs to
+      RemoveGroupMember(group, sam)     removes a user from a group
+      SetEnabled(sam, bool)             enables or disables an account
+      SetDescription(sam, text)         replaces the description
+      MoveUser(sam, dn)                 moves the account to another OU
+      RemoveUser(sam)                   deletes the account (rollback of an onboarding)
       Save()                            keeps the changes (no-op in AD)
+
+    A user object has at least samAccountName, employeeId, ou, enabled and
+    description.
 
     This file implements it in memory, loaded from and saved to a JSON file.
     The Active Directory provider (phase 4) implements the same methods with
@@ -121,6 +130,7 @@ function Open-ADFlowMockDirectory {
             manager               = $Spec.Manager
             mail                  = $Spec.Mail
             ou                    = $Spec.Ou
+            description           = [string] $Spec.Description
             enabled               = [bool] $Spec.Enabled
             passwordSet           = $true
             changePasswordAtLogon = [bool] $Spec.ChangePasswordAtLogon
@@ -142,6 +152,50 @@ function Open-ADFlowMockDirectory {
         param([string] $Group)
         if (-not $this.Groups.ContainsKey($Group)) { throw "The group $Group does not exist" }
         return , $this.Groups[$Group].ToArray()
+    }
+
+    $directory | Add-Member -MemberType ScriptMethod -Name GetUserGroups -Value {
+        param([string] $SamAccountName)
+        if (-not $this.Users.ContainsKey($SamAccountName)) { throw "The user $SamAccountName does not exist" }
+        $names = foreach ($group in $this.Groups.Keys) {
+            if ($this.Groups[$group] | Where-Object { $_ -eq $SamAccountName }) { $group }
+        }
+        return , @($names | Sort-Object)
+    }
+
+    $directory | Add-Member -MemberType ScriptMethod -Name RemoveGroupMember -Value {
+        param([string] $Group, [string] $SamAccountName)
+        if (-not $this.Groups.ContainsKey($Group)) { throw "The group $Group does not exist" }
+        $members = $this.Groups[$Group]
+        for ($i = $members.Count - 1; $i -ge 0; $i--) {
+            if ($members[$i] -eq $SamAccountName) { $members.RemoveAt($i) }
+        }
+    }
+
+    $directory | Add-Member -MemberType ScriptMethod -Name SetEnabled -Value {
+        param([string] $SamAccountName, [bool] $Enabled)
+        if (-not $this.Users.ContainsKey($SamAccountName)) { throw "The user $SamAccountName does not exist" }
+        $this.Users[$SamAccountName] | Add-Member -NotePropertyName enabled -NotePropertyValue $Enabled -Force
+    }
+
+    $directory | Add-Member -MemberType ScriptMethod -Name SetDescription -Value {
+        param([string] $SamAccountName, [string] $Description)
+        if (-not $this.Users.ContainsKey($SamAccountName)) { throw "The user $SamAccountName does not exist" }
+        $this.Users[$SamAccountName] | Add-Member -NotePropertyName description -NotePropertyValue $Description -Force
+    }
+
+    $directory | Add-Member -MemberType ScriptMethod -Name MoveUser -Value {
+        param([string] $SamAccountName, [string] $TargetOu)
+        if (-not $this.Users.ContainsKey($SamAccountName)) { throw "The user $SamAccountName does not exist" }
+        if (-not $this.TestOu($TargetOu)) { throw "The OU $TargetOu does not exist" }
+        $this.Users[$SamAccountName] | Add-Member -NotePropertyName ou -NotePropertyValue $TargetOu -Force
+    }
+
+    $directory | Add-Member -MemberType ScriptMethod -Name RemoveUser -Value {
+        param([string] $SamAccountName)
+        if (-not $this.Users.ContainsKey($SamAccountName)) { throw "The user $SamAccountName does not exist" }
+        foreach ($group in @($this.Groups.Keys)) { $this.RemoveGroupMember($group, $SamAccountName) }
+        [void] $this.Users.Remove($SamAccountName)
     }
 
     $directory | Add-Member -MemberType ScriptMethod -Name Save -Value {

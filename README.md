@@ -11,37 +11,51 @@
 HR sends a CSV with the people who start next month. ADFlow turns each row into
 a ready-to-use account: a unique user name, the right OU for the department, the
 right groups for the job title and a temporary password that must be changed at
-the first logon. Every action is logged with the information needed to undo it.
+the first logon. When people leave, another CSV closes their accounts: disabled,
+out of their groups, moved to the leavers OU and with their files archived.
+Every action is logged with the information needed to undo it, and a single
+command reverts a whole run.
 
-> **Status: phase 1 of 5.** Onboarding works end to end against a simulated
-> directory. Offboarding, rollback, home folders, the HTML report and the real
-> Active Directory provider follow (see the [roadmap](#roadmap)).
+> **Status: phase 2 of 5.** Onboarding, offboarding and rollback work end to end
+> against a simulated directory. Home folder creation, the welcome email, the
+> HTML report and the real Active Directory provider follow (see the
+> [roadmap](#roadmap)).
 
 ## Why it is built this way
 
 The logic never calls the ActiveDirectory module directly. It talks to a
 **directory provider**, a small object with methods such as `FindUser`,
-`NewUser` and `AddGroupMember`. Two providers implement it:
+`NewUser`, `AddGroupMember`, `SetEnabled` and `MoveUser`. Two providers
+implement it:
 
 | Provider | Used for | Status |
 | --- | --- | --- |
 | `Mock` | tests, the demo, any PC without a domain | ready |
 | `ActiveDirectory` | a real domain, through RSAT (`New-ADUser`, `Add-ADGroupMember`…) | phase 4 |
 
-Because of that, every rule (names, OUs, groups, validation, idempotency, logging)
-is tested with Pester on a normal Windows computer and in GitHub Actions, without
-a domain controller.
+Because of that, every rule (names, OUs, groups, validation, protections,
+idempotency, logging, rollback) is tested with Pester on a normal Windows
+computer and in GitHub Actions, without a domain controller.
+
+Offboarding and rollback describe every change as data, for example
+`@{ Action = 'MoveUser'; SamAccountName = 'ana.soto'; TargetOu = '…' }`. The
+same object is written to the audit trail together with its reverse action, and
+both are run by one function, `Invoke-ADFlowAction`. That is what makes the
+rollback reliable: undoing a run is replaying its reverse actions.
 
 ```
-HR CSV ──► Import-ADFlowHireFile ──► Invoke-ADFlowOnboarding ──► directory provider
-            (validation)               │  Get-ADFlowSamAccountName     ├─ Mock (JSON)
-                                       │  Get-ADFlowDepartmentOu       └─ ActiveDirectory (phase 4)
-settings ──► Get-ADFlowConfig ─────────┤  Get-ADFlowGroupAssignment
-                                       │  Get-ADFlowRandomPassword
-                                       └─► audit trail: audit.jsonl, audit.csv, summary.json
+HR CSV ──► Import-ADFlowHireFile ───► Invoke-ADFlowOnboarding ──┐
+leavers ─► Import-ADFlowLeaverFile ─► Invoke-ADFlowOffboarding ─┼─► directory provider ── Mock (JSON)
+settings ► Get-ADFlowConfig                                     │   (Invoke-ADFlowAction) └ ActiveDirectory (phase 4)
+                                                                │
+                      audit trail (audit.jsonl + undo) ◄────────┘
+                                 │
+                                 └──► Undo-ADFlowRun: reverse actions, last to first
 ```
 
-## Features (phase 1)
+## Features
+
+### Onboarding
 
 - **Unique user names.** `María José García López` → `maria.garcia`. If it is
   taken: `maria.garcial` (initial of the second surname), then `maria.garcia2`,
@@ -62,11 +76,50 @@ settings ──► Get-ADFlowConfig ─────────┤  Get-ADFlowGr
   dates. One bad row does not stop the others.
 - **Idempotent**: a person whose `EmployeeId` is already in the directory is
   skipped, so the same file can be run twice safely.
+
+### Offboarding
+
+For each leaver, in this order:
+
+1. find the account by `EmployeeId` or `SamAccountName` (and reject the row when
+   both are given and point to different accounts);
+2. refuse **protected accounts** (`administrator`, `krbtgt`…) and members of
+   **protected groups** (`Domain Admins`…);
+3. **record the group membership**, OU, state and description before touching
+   anything;
+4. disable the account;
+5. write the leave date and reason in its description;
+6. remove it from every group except the ones to keep (`Domain Users`);
+7. move it to the leavers OU;
+8. move its personal folder to the archive as `<user>_<yyyyMMdd>` (also across
+   drives or shares).
+
+An account already disabled and in the leavers OU is skipped. If a step fails,
+the remaining steps of that person are not attempted and the result says how
+many earlier steps can be undone.
+
+### Rollback
+
+`Undo-ADFlowRun` (or `ADFlow.ps1 -Action Undo -RunId …`) reads the audit trail
+of a run and replays the reverse actions from the last to the first:
+
+- after an **offboarding**, the folder returns, the account goes back to its OU
+  and groups, gets its old description and is enabled again;
+- after an **onboarding**, the new accounts are removed from their groups and
+  deleted.
+
+The rollback is a run of its own with its own audit trail. The original run is
+marked with `rollback.json` and is not undone twice unless `-Force` is used.
+Dry runs, `-WhatIf` runs and rollbacks cannot be undone (there is nothing to
+undo). One failure does not stop the rest: the rollback reverts as much as it can
+and reports what failed.
+
+### Common to all actions
+
 - **Three modes**: `-DryRun` (works out the whole plan and logs it as *Planned*),
   standard `-WhatIf`, and live.
 - **Audit trail** per run in `output\runs\<RunId>\`: `audit.jsonl` (written as
-  it happens), `audit.csv` and `summary.json`. Each change carries its reverse
-  action (`RemoveUser`, `RemoveGroupMember`) for the rollback of phase 2.
+  it happens), `audit.csv` and `summary.json`.
 
 ## Quick start
 
@@ -77,58 +130,109 @@ is needed to try it: the demo uses the simulated directory.
 git clone https://github.com/DavidGoRi/ADFlow.git
 cd ADFlow
 
-# See what would happen, without changing anything
+# Onboarding: see what would happen, then do it in the simulated directory
 .\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -DryRun
-
-# Create the accounts in the simulated directory (output\mock-directory.json)
 .\ADFlow.ps1 -Action Onboard -CsvPath .\demo\new-hires.csv -ResetMockDirectory
+
+# Offboarding, with a fictitious personal folder to archive
+New-Item -ItemType Directory -Path .\output\home\ana.garcial -Force
+.\ADFlow.ps1 -Action Offboard -CsvPath .\demo\leavers.csv -HomeRoot .\output\home -ArchiveRoot .\output\archive
+
+# Undo it (the run id is printed at the end of the previous command)
+.\ADFlow.ps1 -Action Undo -RunId 20261117-175912-1a43 -HomeRoot .\output\home -ArchiveRoot .\output\archive
 ```
 
-Dry run of the demo file (all names and data are fictitious):
+Dry run of the demo onboarding file (all names and data are fictitious):
 
 ```
-Planned   E1001   maria.garcial         María José García López
-Planned   E1002   jose.pena             José Ángel Peña Muñoz
-Planned   E1003   pedro.delafuente      Pedro de la Fuente Ruiz
-          Group GG-CRM-Users does not exist in the directory and was not assigned
-Planned   E1004   inigo.martinezaragon  Íñigo Martínez-Aragón
-Planned   E1005   ana.garcia2           Ana García Lorenzo
-Planned   E1006   zoe.oconnor           Zoë O'Connor
-          Title 'Brand Manager' has no role in the settings: only the default groups are given
-Planned   E1007   maximiliano.fernande  Maximiliano Fernández-Villaverde
-          Group GG-CRM-Users does not exist in the directory and was not assigned; Manager javier.moreno not found: the account has no manager
-Rejected  E1008   -                     Lucía Gómez
-          Department 'Legal' has no OU in the settings
-Rejected  E1002   -                     José Peña
-          EmployeeId 'E1002' is repeated (first on row 3)
-Skipped   E0907   laura.sanchez         Laura Sánchez Ortega
-          Employee E0907 already has the account laura.sanchez
-Rejected  E1009   -                     Sofía
-          LastName is empty; StartDate '2026-13-01' is not a yyyy-MM-dd date
-Planned   E1010   jose.penam            José Ángel Peña Moreno
+Planned    E1001   maria.garcial         María José García López
+Planned    E1002   jose.pena             José Ángel Peña Muñoz
+Planned    E1003   pedro.delafuente      Pedro de la Fuente Ruiz
+           Group GG-CRM-Users does not exist in the directory and was not assigned
+Planned    E1004   inigo.martinezaragon  Íñigo Martínez-Aragón
+Planned    E1005   ana.garcia2           Ana García Lorenzo
+Planned    E1006   zoe.oconnor           Zoë O'Connor
+           Title 'Brand Manager' has no role in the settings: only the default groups are given
+Planned    E1007   maximiliano.fernande  Maximiliano Fernández-Villaverde
+           Group GG-CRM-Users does not exist in the directory and was not assigned; Manager javier.moreno not found: the account has no manager
+Rejected   E1008   -                     Lucía Gómez
+           Department 'Legal' has no OU in the settings
+Rejected   E1002   -                     José Peña
+           EmployeeId 'E1002' is repeated (first on row 3)
+Skipped    E0907   laura.sanchez         Laura Sánchez Ortega
+           Employee E0907 already has the account laura.sanchez
+Rejected   E1009   -                     Sofía
+           LastName is empty; StartDate '2026-13-01' is not a yyyy-MM-dd date
+Planned    E1010   jose.penam            José Ángel Peña Moreno
 
 Run 20261117-174252-2246: 8 Planned, 3 Rejected, 1 Skipped
+```
+
+The demo offboarding file:
+
+```
+Offboarded E0903   ana.garcial           Ana García López
+Offboarded E0904   carlos.ruiz           Carlos Ruiz Navarro
+           Personal folder C:\…\ADFlow\output\home\carlos.ruiz not found: nothing to archive
+Skipped    E0899   pablo.ortiz           Pablo Ortiz Vega
+           pablo.ortiz is already disabled and in the leavers OU
+Rejected           adm.laura             Laura Sánchez Ortega (admin)
+           adm.laura is a member of the protected group(s) Domain Admins
+Rejected           administrator         Administrator
+           administrator is a protected account
+Failed     E9999   -
+           No account found for EmployeeId E9999
+Rejected   E0904   maria.garcia
+           EmployeeId E0904 belongs to carlos.ruiz, not to maria.garcia
+Rejected   E0903   -
+           E0903 is repeated (first on row 2)
+
+Run 20261117-175912-1a43: 2 Offboarded, 1 Skipped, 4 Rejected, 1 Failed
+```
+
+And its rollback:
+
+```
+Reverted  #14   MoveUser           carlos.ruiz           Move to OU=Finance,OU=Staff,DC=corp,DC=example,DC=com
+Reverted  #13   AddGroupMember     carlos.ruiz           Add to group GG-Finance-Users
+Reverted  #12   AddGroupMember     carlos.ruiz           Add to group GG-ERP-Users
+Reverted  #11   AddGroupMember     carlos.ruiz           Add to group GG-AllStaff
+Reverted  #10   SetDescription     carlos.ruiz           Set description ''
+Reverted  #9    SetEnabled         carlos.ruiz           Enable account
+Reverted  #7    MoveFolder         …\archive\ana.garcial_20261117 Move folder to …\home\ana.garcial
+Reverted  #6    MoveUser           ana.garcial           Move to OU=Sales,OU=Staff,DC=corp,DC=example,DC=com
+Reverted  #5    AddGroupMember     ana.garcial           Add to group GG-Sales-Users
+Reverted  #4    AddGroupMember     ana.garcial           Add to group GG-AllStaff
+Reverted  #3    SetDescription     ana.garcial           Set description ''
+Reverted  #2    SetEnabled         ana.garcial           Enable account
+
+Run 20261117-175912-c371: 12 Reverted
 ```
 
 ### Parameters of `ADFlow.ps1`
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `-Action` | | `Onboard` (more actions in later phases) |
-| `-CsvPath` | | HR file of new hires |
-| `-ConfigPath` | `config\adflow.json` | Domain, OUs, roles and groups |
+| `-Action` | | `Onboard`, `Offboard` or `Undo` |
+| `-CsvPath` | | HR file, for `Onboard` and `Offboard` |
+| `-RunId` | | Run to revert, for `Undo` |
+| `-ConfigPath` | `config\adflow.json` | Domain, OUs, roles, groups and offboarding rules |
 | `-Provider` | `Mock` | Directory provider |
 | `-MockSeedPath` | `demo\directory.json` | Starting state of the simulated directory |
 | `-MockStatePath` | `output\mock-directory.json` | Where the simulated directory keeps its changes |
 | `-LogPath` | `output\runs` | Audit trail folder |
+| `-HomeRoot`, `-ArchiveRoot` | from the settings | Override where personal folders live and are archived |
 | `-DryRun` | | Plan only, no changes |
 | `-WhatIf` | | Standard PowerShell preview |
+| `-Force` | | Undo a run that was already rolled back |
 | `-ResetMockDirectory` | | Start the simulated directory again from the seed |
 | `-PassThru` | | Return the result objects (passwords as `SecureString`) |
 
-## HR file
+## HR files
 
-UTF-8 CSV with a header, separated by `,` or `;`:
+UTF-8 CSV with a header, separated by `,` or `;`.
+
+**New hires** ([`demo/new-hires.csv`](demo/new-hires.csv)):
 
 ```
 EmployeeId;FirstName;LastName;Department;Title;Manager;StartDate
@@ -144,10 +248,23 @@ E1001;María José;García López;IT;Helpdesk Technician;laura.sanchez;2026-12-0
 | `Manager` | no | `sAMAccountName` of the manager |
 | `StartDate` | no | `yyyy-MM-dd` |
 
+**Leavers** ([`demo/leavers.csv`](demo/leavers.csv)):
+
+```
+EmployeeId;SamAccountName;LeaveDate;Reason
+E0903;;2026-11-30;Resignation
+;carlos.ruiz;2026-11-30;End of contract
+```
+
+| Column | Required | Notes |
+| --- | --- | --- |
+| `EmployeeId`, `SamAccountName` | one of them | When both are given they must be the same account |
+| `LeaveDate` | no | `yyyy-MM-dd`; today when empty. Goes to the description |
+| `Reason` | no | Goes to the description |
+
 ## Settings
 
-[`config/adflow.json`](config/adflow.json) maps departments to OUs and job titles
-to groups:
+[`config/adflow.json`](config/adflow.json):
 
 ```json
 {
@@ -160,6 +277,14 @@ to groups:
   },
   "roles": {
     "Helpdesk Technician": [ "GG-IT-Helpdesk", "GG-VPN-Users" ]
+  },
+  "homeFolders": { "root": "\\\\fs01.corp.example.com\\home$" },
+  "offboarding": {
+    "ou": "OU=Leavers,DC=corp,DC=example,DC=com",
+    "archiveRoot": "\\\\fs01.corp.example.com\\archive$\\home",
+    "keepGroups": [ "Domain Users" ],
+    "protectedAccounts": [ "administrator", "krbtgt" ],
+    "protectedGroups": [ "Domain Admins", "Enterprise Admins", "Schema Admins" ]
   }
 }
 ```
@@ -168,13 +293,14 @@ The file is validated on load and every problem is reported at once.
 
 ## Audit trail
 
-Each run writes a folder `output\runs\<yyyyMMdd-HHmmss-xxxx>\`:
+Each run writes a folder `output\runs\<yyyyMMdd-HHmmss-xxxx>\`. Every line of
+`audit.jsonl` is one action; changes carry their reverse action:
 
 ```json
-{"timestamp":"2026-11-17T17:43:00.4011501+01:00","runId":"20261117-174300-56fe","sequence":1,
- "action":"CreateUser","target":"maria.garcial","employeeId":"E1001","status":"Succeeded","message":"",
- "details":{"SamAccountName":"maria.garcial","Ou":"OU=IT,OU=Staff,DC=corp,DC=example,DC=com","...":"..."},
- "undo":{"Action":"RemoveUser","SamAccountName":"maria.garcial"}}
+{"timestamp":"2026-11-17T17:59:12.4011501+01:00","runId":"20261117-175912-1a43","sequence":6,
+ "action":"MoveUser","target":"ana.garcial","employeeId":"E0903","status":"Succeeded","message":"",
+ "details":{"SamAccountName":"ana.garcial","TargetOu":"OU=Leavers,DC=corp,DC=example,DC=com"},
+ "undo":{"Action":"MoveUser","SamAccountName":"ana.garcial","TargetOu":"OU=Sales,OU=Staff,DC=corp,DC=example,DC=com"}}
 ```
 
 Statuses: `Succeeded`, `Failed`, `Planned` (dry run), `WhatIf`, `Skipped`,
@@ -183,11 +309,13 @@ Statuses: `Succeeded`, `Failed`, `Planned` (dry run), `WhatIf`, `Skipped`,
 
 ## Tests
 
-130 Pester tests cover name generation, passwords, settings, HR file validation,
-the simulated directory, the audit trail, the three modes, failures in the
-directory and the entry script. They also check that every script is UTF-8 with
-BOM (needed by Windows PowerShell 5.1 for accented text) and that the sample data
-only uses the reserved `example.com` domain.
+191 Pester tests cover name generation, passwords, settings, both HR files, the
+simulated directory, the action catalogue, folder archiving, the audit trail,
+onboarding, offboarding (protections, partial failures, idempotency), rollback
+(exact restoration, order, double-undo guard, failures) and the entry script.
+They also check that every script is UTF-8 with BOM (needed by Windows
+PowerShell 5.1 for accented text) and that the sample data only uses the
+reserved `example.com` domain.
 
 ```powershell
 Install-Module Pester -MinimumVersion 5.5 -Scope CurrentUser -SkipPublisherCheck
@@ -204,12 +332,11 @@ GitHub Actions runs both on Windows PowerShell 5.1 for every push.
 1. **Core and onboarding** ✅ — provider layer and simulated directory, unique
    names, OUs and groups, passwords, HR file validation, `-DryRun`/`-WhatIf`,
    audit trail, tests and CI.
-2. **Offboarding and rollback** — disable the account, remove its groups and keep
-   them in the log, move it to the leavers OU; `Undo-ADFlowRun` replays the
-   `undo` entries of a run in reverse order.
+2. **Offboarding and rollback** ✅ — disable, record and remove groups, leavers
+   OU, folder archive, protected accounts; `Undo-ADFlowRun`.
 3. **Home folders, welcome email and report** — personal folder with NTFS
-   permissions, welcome message from a template (generated, not sent) and an
-   HTML report of each run.
+   permissions at onboarding, welcome message from a template (generated, not
+   sent) and an HTML report of each run.
 4. **Active Directory provider and lab** — the same methods on top of RSAT, and
    a guide to build a test domain with Windows Server Evaluation in Hyper-V.
 5. **Polish** — screenshots, changelog and version 1.0.0.
@@ -219,15 +346,20 @@ GitHub Actions runs both on Windows PowerShell 5.1 for every push.
 ```
 ADFlow.ps1                 entry point
 config/adflow.json         sample settings (fictitious domain)
-demo/new-hires.csv         sample HR file
+demo/new-hires.csv         sample HR file of new hires
+demo/leavers.csv           sample HR file of leavers
 demo/directory.json        starting state of the simulated directory
 src/Naming.ps1             accent folding and unique user names
 src/Password.ps1           temporary passwords
 src/Config.ps1             settings, departments and roles
 src/HRFile.ps1             HR file reading and validation
 src/MockDirectory.ps1      simulated directory provider
+src/Actions.ps1            changes described as data, and how to run them
+src/HomeFolder.ps1         personal folder paths and archiving
 src/Audit.ps1              audit trail
 src/Onboarding.ps1         onboarding
+src/Offboarding.ps1        offboarding
+src/Rollback.ps1           rollback
 tests/                     Pester tests
 ```
 

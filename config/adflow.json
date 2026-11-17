@@ -28,7 +28,14 @@
     "HR Specialist": [ "GG-HR-Users" ],
     "Marketing Specialist": [ "GG-Marketing-Users" ]
   },
+  "homeFolders": {
+    "root": "\\\\fs01.corp.example.com\\home$"
+  },
   "offboarding": {
-    "ou": "OU=Leavers,DC=corp,DC=example,DC=com"
+    "ou": "OU=Leavers,DC=corp,DC=example,DC=com",
+    "archiveRoot": "\\\\fs01.corp.example.com\\archive$\\home",
+    "keepGroups": [ "Domain Users" ],
+    "protectedAccounts": [ "administrator", "krbtgt" ],
+    "protectedGroups": [ "Domain Admins", "Enterprise Admins", "Schema Admins" ]
   }
 }

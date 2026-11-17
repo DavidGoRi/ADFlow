@@ -1,0 +1,9 @@
+EmployeeId;SamAccountName;LeaveDate;Reason
+E0903;;2026-11-30;Resignation
+;carlos.ruiz;2026-11-30;End of contract
+E0899;;2026-10-31;Resignation
+;adm.laura;2026-11-30;Role change
+;administrator;;
+E9999;;2026-11-30;
+E0904;maria.garcia;2026-11-30;
+E0903;;2026-12-01;Resignation
